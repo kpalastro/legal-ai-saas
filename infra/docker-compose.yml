@@ -1,0 +1,95 @@
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: lexsim
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    ports: ["5434:5432"]
+    # Dev-only GoTrue DB + `auth` schema stub. Mounted as the whole directory so init
+    # runs 00-create-gotrue-db.sql then 01-auth-stub.sql in order. Never deploy the stub.
+    # Pointing this at a single deleted file makes Docker recreate it as a DIRECTORY
+    # (verified: "could not read from input file: Is a directory").
+    volumes:
+      - ./postgres-init:/docker-entrypoint-initdb.d:ro
+    healthcheck: { test: ["CMD-SHELL", "pg_isready -U postgres"], interval: 3s, retries: 10 }
+
+  redis:
+    image: redis:7-alpine
+    ports: ["6379:6379"]
+    healthcheck: { test: ["CMD", "redis-cli", "ping"], interval: 3s, retries: 10 }
+
+  supabase-auth:  # self-hosted GoTrue — same auth.uid() RLS semantics as prod Supabase
+    # NOTE: GoTrue publishes NO `latest` tag (pull fails) — pin a version. Also note the
+    # correct env prefix is GOTRUE_*, and GOTURE_DB_DATABASE_URL (legacy typo, still read)
+    # must be a uri.Scheme-postgres URL or boot panics on parsing "postgres" as a driver.
+    image: supabase/gotrue:v2.196.0
+    ports: ["9999:9999"]
+    environment:
+      GOTRUE_DB_DATABASE_URL: postgres://postgres:postgres@postgres:5432/gotrue
+      # GoTrue runs its own init migrations creating auth.users(instance_id,...) — it must
+      # NOT share the app DB (lexsim stub would occupy `auth.users` first and the richer
+      # migration crash-loops on the collision; verified: column "instance_id" does not
+      # exist). GoTrue's queries are UNQUALIFIED (`users`, `identities`) so it needs
+      # `search_path=auth`, set at the role+database level in postgres-init/00 — the
+      # DB_SEARCH_PATH env var is ignored in v2.x (verified live: signup 500s with
+      # relation "identities" does not exist even with DB_SEARCH_PATH=auth set).
+      GOTRUE_DB_DRIVER: postgres
+      GOTRUE_DB_NAMESPACE: auth
+      GOTRUE_SITE_URL: http://localhost:3000
+      GOTRUE_JWT_SECRET: ${GOTRUE_JWT_SECRET:-dev-only-jwt-secret-change-me}
+      GOTRUE_JWT_EXP: 3600
+      GOTRUE_DISABLE_SIGNUP: "false"
+      GOTRUE_MAILER_AUTOCONFIRM: "true"           # v1: Mailpit only, no real email
+      GOTRUE_SMTP_HOST: mailpit
+      GOTRUE_SMTP_PORT: 1025
+      GOTRUE_SMTP_ADMIN_EMAIL: dev@lexsim.local
+      GOTRUE_EXTERNAL_GOOGLE_ENABLED: "false"     # wire real Google OAuth in Phase 2
+      # v2.x REQUIRES these explicit external URLs or the container fa‑exits at boot:
+      API_EXTERNAL_URL: http://localhost:9999
+      GOTRUE_API_EXTERNAL_URL: http://localhost:9999
+      GOTRUE_API_HOST: 0.0.0.0
+      GOTRUE_API_PORT: 9999
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O - http://localhost:9999/health || exit 1"]
+      interval: 5s
+      retries: 12
+    depends_on: { postgres: { condition: service_healthy } }
+
+  mailpit:  # catches all SMTP locally; assertions against its :8025 API
+    image: axllent/mailpit
+    ports: ["1025:1025", "8025:8025"]
+
+  api:
+    build: ../apps/api
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+    environment:
+      LLM_PROVIDER: ollama
+      # SECURITY S4: daemon stays on host loopback; containers reach it via
+      # host.docker.internal — never `localhost` inside the container, and never
+      # OLLAMA_HOST=0.0.0.0 (Ollama has no auth).
+      OLLAMA_BASE_URL: http://host.docker.internal:11434
+      LLM_MODEL: qwen3.5:latest
+      DATABASE_URL: postgresql+asyncpg://postgres:postgres@postgres:5432/lexsim
+      REDIS_URL: redis://redis:6379/0
+      GOTRUE_URL: http://supabase-auth:9999
+      SUPABASE_JWT_SECRET: ${GOTRUE_JWT_SECRET:-dev-only-jwt-secret-change-me}
+    extra_hosts: ["host.docker.internal:host-gateway"]   # linux runners; no-op on macOS
+    ports: ["8000:8000"]
+    depends_on:
+      postgres: { condition: service_healthy }
+      redis: { condition: service_healthy }
+      supabase-auth: { condition: service_started }
+
+  worker:
+    build: ../apps/api
+    command: arq worker.main.WorkerSettings
+    environment:
+      LLM_PROVIDER: ollama
+      OLLAMA_BASE_URL: http://host.docker.internal:11434
+      LLM_MODEL: qwen3.5-fast:latest          # integration tier per TEST_PLAN v1.1
+      DATABASE_URL: postgresql+asyncpg://postgres:postgres@postgres:5432/lexsim
+      REDIS_URL: redis://redis:6379/0
+    extra_hosts: ["host.docker.internal:host-gateway"]
+    depends_on: { postgres: { condition: service_healthy }, redis: { condition: service_healthy } }

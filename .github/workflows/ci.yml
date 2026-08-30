@@ -1,0 +1,36 @@
+name: ci
+on: [pull_request]
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env: { POSTGRES_PASSWORD: postgres, POSTGRES_DB: lexsim }
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U postgres" --health-interval 3s --health-retries 10
+      redis:
+        image: redis:7-alpine
+        ports: ["6379:6379"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.13" }
+      - run: uv sync --group dev
+        working-directory: apps/api
+      - run: uv run ruff check . && uv run mypy app
+        working-directory: apps/api
+      - run: uv run alembic upgrade head
+        working-directory: apps/api
+        env:
+          LEXSIM_DATABASE_URL: postgresql+asyncpg://postgres:postgres@localhost:5432/lexsim
+      # Gates G6/G3/C6 now; G1/G2/G5 (DB/RLS) + G7 (AustLII deny-list) wire up in next PRs.
+      - run: uv run pytest --cov=app --cov-fail-under=80
+        working-directory: apps/api
+      # G8 stub: assert no cross-region Bedrock model IDs anywhere in the repo
+      - name: G8 — no cross-region inference routing (APP 8)
+        run: |
+          ! grep -rE '"(global|apac|us|eu)\.' apps/api/app apps/api/worker \
+            && echo "G8 pass: all model IDs regional"

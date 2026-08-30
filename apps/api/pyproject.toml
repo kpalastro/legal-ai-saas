@@ -1,0 +1,43 @@
+[project]
+name = "lexsim-api"
+version = "0.1.0"
+description = "LexSim AI — FastAPI monolith (Supabase Auth, RLS, arq, Bedrock gpt-oss-120b)"
+requires-python = ">=3.13"
+dependencies = [
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.32",
+    "sqlalchemy[asyncio]>=2.0.36",
+    "asyncpg>=0.30",
+    "alembic>=1.14",
+    "pydantic>=2.9",
+    "pydantic-settings>=2.6",
+    "arq>=0.26",
+    "redis>=5.2",
+    "boto3>=1.35",
+    "jinja2>=3.1",
+    "pymupdf>=1.25",
+    "python-docx>=1.1",
+    "httpx>=0.28",
+    "pyjwt>=2.9",
+    "structlog>=24.4",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.3",
+    "pytest-asyncio>=0.25",
+    "pytest-cov>=6.0",
+    "ruff>=0.8",
+    "mypy>=1.13",
+]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+markers = [
+  "compliance: SC Gen 23 / APP / LPP gates — cannot be skipped on PRs touching documents/, export, rls, audit",
+]
+
+[tool.ruff]
+target-version = "py313"
+line-length = 100

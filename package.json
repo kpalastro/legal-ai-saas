@@ -1,0 +1,14 @@
+{
+  "name": "legal-ai-saas",
+  "private": true,
+  "packageManager": "pnpm@10.1.0",
+  "scripts": {
+    "build": "turbo build",
+    "dev": "turbo dev",
+    "test": "turbo test",
+    "lint": "turbo lint"
+  },
+  "devDependencies": {
+    "turbo": "^2.5.0"
+  }
+}
