@@ -89,7 +89,7 @@ Contract                  per-provider   — FRL / NSW Caselaw / JADE / Bedrock 
 | `test_debate_sse_stream` | Simulated debate streams events in order over SSE; client reconnect resumes from `Last-Event-ID`; no duplicate turns |
 | `test_arq_job_idempotency` | Simulation job re-run after failure doesn't duplicate turns or double-bill; retries capped |
 | `test_citation_verifier_statuses` | Verifier returns ❌ fake / ⚠️ unverified / ✅ verified against recorded FRL + NSW Caselaw fixtures; hallucination score = fakes/total; `safe_to_file` only <5% |
-| `test_verifier_network_deny_list` | All outbound HTTP from `citations/` resolves only to allow-listed hosts; austlii.edu.au in deny list (G7) |
+| `test_verifier_network_deny_list` → **`tests/test_g7_denylist.py` (6 tests, landed 31 Aug)** | AustLII deny-list tripwire raises BEFORE any HTTP call on injected austlii hosts (user-controlled citation text is the real attack surface); neither outbound-URL template can construct a denied host from any extractable citation incl. hostile `[2024] AUSTLII 1`; **honesty property**: offline/unreachable sources degrade to UNVERIFIED, never fabricated VERIFIED (fails loudly if a refactor fakes verification) — and its mirror, so genuine source concurrence still earns VERIFIED. G7 fully covered. |
 | `test_deadline_calculator` | NSW/VIC/QLD public holidays + weekends correct for all doc types; deterministic fixture dates |
 | `test_intake_extraction` | Party/cause-of-action extraction from golden PDFs/DOCX (pymupdf/python-docx); malformed uploads → clean 400 |
 | `test_schema_catches_regression` | Alembic migration test asserting `users` table has NO `clerk_user_id` column and `cases.user_id` references `auth.users`-shaped UUID (guards compliance gap #1) |

@@ -78,3 +78,24 @@ Reviewed the `?token=` SSE fallback as shipped in the running container (probed 
 - The COMPLIANCE_NOTE in `db.py` (RFC 6750 §2.3 / RFC 9700 §4.3.2) already says "do not carry into prod" — this
   addendum puts a *deadline owner* on that sentence: it should close in the same PR that removes the dev-only
   items, not drift into prod by inertia.
+
+## Addendum — feature-complete round audit (features 4/5/6, `a4c3a9a`)
+
+**Suite 51/51 confirmed on my re-run** (35s, includes the 14 feature+log-filter tests). Reviewed every new security
+surface by reading the code + live regex/behavior probes:
+
+| Item | Verdict |
+|---|---|
+| `log_filter.TokenScrubFilter` (deploy's regression fix for my 31 Aug access-log finding) | ✅ **Approved.** The tuple-args shape they found (uvicorn AccessFormatter builds the request line from `record.args`, so msg-only scrubbing misses the JWT) is a genuine catch — I verified their test suite covers all three record shapes and that arity is preserved post-scrub. The "token value never logged" claim is now design-backed, not log-window luck. |
+| Citation module (features 4a) | ✅ Honest-offline default confirmed (unreachable → UNVERIFIED, never fabricated concurrence). Deterministic path, no LLM. |
+| G7 deny-list | ✅ `_denylisted()` raises on any austlii URL, and neither outbound URL template (`check_frl`/`check_nsw_caselaw`) can construct an austlii host (verified: 'austlii' appears in the module only inside the denylist tuple). **Gap:** no *test file* yet asserts the deny-list tripwire or exercises `check_frl`/`check_nsw_caselaw` (only `extract_citations` has tests) — the tripwire is live code with zero test coverage. G7 in TEST_PLAN.md explicitly asked for a "HTTP-mock allow/deny list" test; it doesn't exist yet. |
+| C5 gate (3-layer) | ✅ API 403 export / 409 attest-until-verified / DB triggers all independently enforce the same three conditions; `attest` 409s on unverified citations (attestation can't bypass verification) — matches @compliance's SC Gen 23 read. |
+| XSS in rendered docs | ✅ Probed: Jinja2 `autoescape=True` holds — `<script>` payload renders as `&lt;script&gt;` in the filed document. Templates cannot be user-supplied (dict of 5 pinned templates). |
+| Deadline calculator | ✅ NSW holidays (ANZAC, Christmas, Boxing Day) asserted; unknown rule → 422 shape; disclaimers present per DoNotPay precedent. |
+| Billing test-mode | ✅ Amounts match REQUIREMENTS.md pricing table; 422 on unknown plan; no Stripe secret in v1 (nothing to leak). |
+
+**Open security item (small, non-blocking):** G7 deny-list tripwire tests — the deny-list enforcement exists in
+`app/citations/service.py` but has no test coverage yet; the G7 TEST_PLAN gate expects an HTTP-mock allow/deny
+list test. Hand-off suggestion: @testing add `test_g7_denylist_tripwire` (assert `_denylisted()` raises, assert
+check_frl/check_nsw_caselaw reject injected austlii URLs) and a mocked-client test that offline sources still
+yield UNVERIFIED, never VERIFIED. Everything else in the feature-complete claim is independently verified.
