@@ -182,44 +182,60 @@ export default function Home() {
 
     setTurns([]);
 
-    setStreamErr(null);
-
+        setStreamErr(null);
     setStreaming(true);
 
-    // EventSource can't send headers, so pass the JWT as a query param —
-
-    // the API ALSO accepts ?token= for the SSE path only (GET + EventSource).
-
-    const es = new EventSource(`${API_URL}/cases/${caseId}/simulate?token=${token}`);
-
-    esRef.current = es;
-
-    es.addEventListener("turn", (e) => {
-
-      const payload = JSON.parse((e as MessageEvent).data);
-
-      setTurns((prev) => [...prev, payload]);
-
-    });
-
-    es.addEventListener("done", () => {
-
+    // Header-safe SSE (Phase-2 item 3, security plan): fetch + ReadableStream
+    // instead of EventSource, so the JWT travels in the Authorization header —
+    // never in a URL. Frame format is the same text/event-stream the server
+    // emits: "event: <name>\ndata: <json>\n\n".
+    const abort = new AbortController();
+    esRef.current = { close: () => abort.abort() } as unknown as EventSource;
+    try {
+      const res = await fetch(`${API_URL}/cases/${caseId}/simulate`, {
+        headers: { Authorization: `Bearer ${token}` },
+        signal: abort.signal,
+      });
+      if (!res.ok || !res.body) {
+        setStreamErr(`stream failed (${res.status})`);
+        setStreaming(false);
+        return;
+      }
+      const reader = res.body.getReader();
+      const dec = new TextDecoder();
+      let buf = "";
+      let evt = "";
+      for (;;) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buf += dec.decode(value, { stream: true });
+        let idx: number;
+        while ((idx = buf.indexOf("\n\n")) >= 0) {
+          const frame = buf.slice(0, idx);
+          buf = buf.slice(idx + 2);
+          let data: string | null = null;
+          for (const line of frame.split("\n")) {
+            if (line.startsWith("event: ")) evt = line.slice(7).trim();
+            else if (line.startsWith("data: ")) data = line.slice(6);
+          }
+          if (data == null) continue;
+          const payload = JSON.parse(data);
+          if (evt === "turn") setTurns((prev) => [...prev, payload]);
+          if (evt === "done" || evt === "error") {
+            if (evt === "error") setStreamErr(payload?.detail || "stream error");
+            setStreaming(false);
+            esRef.current = null;
+            return;
+          }
+        }
+      }
       setStreaming(false);
-
-      es.close();
-
-    });
-
-    es.addEventListener("error", (e) => {
-
-      setStreamErr("stream error");
-
-      setStreaming(false);
-
-      es.close();
-
-    });
-
+    } catch {
+      if (!abort.signal.aborted) {
+        setStreamErr("stream error");
+        setStreaming(false);
+      }
+    }
   }
 
 
