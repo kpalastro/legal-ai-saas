@@ -5,14 +5,22 @@
   "note": "statuses: verified needs live source concurrence; this offline run pins unverified/flagged honesty defaults",
   "citations": [
     {
-      "raw": "Act 1900",
-      "status": "unverified",
-      "source": "parser"
+      "raw": "[2019] NSWCA",
+      "status": "flagged",
+      "source": "parser",
+      "url": null
     },
     {
-      "raw": "Act 2019",
+      "raw": "Crimes Act 1900 (NSW)",
       "status": "unverified",
-      "source": "parser"
+      "source": "parser",
+      "url": null
+    },
+    {
+      "raw": "Crimes Act 2019",
+      "status": "unverified",
+      "source": "parser",
+      "url": null
     }
   ]
 }

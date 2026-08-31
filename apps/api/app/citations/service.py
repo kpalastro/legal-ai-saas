@@ -27,12 +27,26 @@ CITATION_SOURCE_DENYLIST = ("austlii",)
 FRL_API = "https://api.legislation.gov.au"  # OData-ish; v1 primary source
 NSW_CASELAW = "https://nsw.caselaw.nsw.gov.au"  # cached HTML search
 
-_MEDIUM_NEUTRAL = re.compile(
-    r"\[\d{4}\]\s*[A-Z]{2,6}\s*\d+", re.ASCII
-)  # e.g. [2023] NSWSC 1101
-_ACT_REF = re.compile(
-    r"\b((?:Act|Act\s+\d{4})\b.*?\b\d{4}\b|\b\d{4}\s*\(Cth\)|\b\d{4}\s*\(NSW\))", re.ASCII
+# Known AU court abbreviations (medium-neutral forms). Anything claiming to be
+# a citation but using an unknown abbreviation is itself a fabrication signal.
+_KNOWN_COURTS = (
+    "HCA", "FCA", "FCAFC", "NSWSC", "NSWCA", "NSWDC", "NSWLEC", "NSWCCA",
+    "VSC", "VSCA", "QSC", "QCA", "SASC", "SASCFC", "WASC", "WASCA",
+    "TASSC", "TASCCA", "ACTSC", "ACTCA", "NTSC", "NTCA", "FedCFamC1", "FedCFamC2",
 )
+_COURT_ALT = "|".join(sorted(_KNOWN_COURTS, key=len, reverse=True))
+_MEDIUM_NEUTRAL = re.compile(
+    rf"\[\d{{4}}\]\s*(?:{_COURT_ALT})\s*\d+", re.ASCII
+)  # e.g. [2023] NSWSC 1101
+_TRUNCATED_MEDIUM = re.compile(
+    rf"\[\d{{4}}\]\s*(?:{_COURT_ALT})\b(?!\s*\d)", re.ASCII
+)  # e.g. "RPS v R [2019] NSWCA" — incomplete citation form; verify as FLAGGED
+_UNKNOWN_COURT_CITE = re.compile(
+    rf"\[\d{{4}}\]\s*(?!{_COURT_ALT}\b)[A-Z]{{2,10}}(?:\s+\d+)?", re.ASCII
+)  # e.g. "[2014] NSW 687" or "[2014] NSW" — not a real court; verify as FLAGGED (fabrication signal)
+_ACT_REF = re.compile(
+    r"\b([A-Z][A-Za-z'’\-]+(?:\s+[A-Z][A-Za-z'’\-]+)*\s+Act\s+\d{4}\s*(?:\(Cth\)|\((?:NSW|VIC|QLD|SA|WA|TAS|ACT|NT)\))?)", re.ASCII
+)  # e.g. "Civil Liability Act 2002 (NSW)" — at least one capitalised word + "Act YYYY"
 
 
 class CitationStatus(StrEnum):
@@ -50,19 +64,35 @@ class CitationFinding:
 
 
 def extract_citations(text: str) -> list[str]:
-    """Pull medium-neutral case citations and Act references from document text."""
+    """Pull medium-neutral case citations and Act references from document text.
+
+    G7: any candidate containing a deny-list token (e.g. "austlii") is dropped
+    at extraction — deny words are not citations and must never reach a URL
+    template. check_frl/check_nsw_caselaw also re-assert via _denylisted().
+    """
     found: list[str] = []
     seen: set[str] = set()
     for m in _MEDIUM_NEUTRAL.finditer(text):
         c = re.sub(r"\s+", " ", m.group(0).strip())
-        if c.lower() not in seen:
-            seen.add(c.lower())
-            found.append(c)
+        if c.lower() in seen or _denylisted(c):
+            continue
+        seen.add(c.lower())
+        found.append(c)
+    def _push(cand: str) -> None:
+        c = re.sub(r"\s+", " ", cand.strip())
+        if not c or c.lower() in seen or _denylisted(c):
+            return
+        seen.add(c.lower())
+        found.append(c)
+
+    for m in _UNKNOWN_COURT_CITE.finditer(text):
+        _push(m.group(0))
+    for m in _TRUNCATED_MEDIUM.finditer(text):
+        _push(m.group(0))  # extraction includes truncated; verification marks FLAGGED
     for m in _ACT_REF.finditer(text):
         c = m.group(1).strip()
-        if len(c) > 6 and c.lower() not in seen:
-            seen.add(c.lower())
-            found.append(c)
+        if len(c) > 6:
+            _push(c)
     return found
 
 
@@ -113,6 +143,14 @@ async def verify_citations(text: str, client: httpx.AsyncClient | None = None) -
         for ref in extract_citations(text):
             if _MEDIUM_NEUTRAL.match(ref):
                 f = await check_nsw_caselaw(ref, c)
+            elif _UNKNOWN_COURT_CITE.match(ref) and not _MEDIUM_NEUTRAL.match(ref):
+                # unknown court abbreviation in a bracket cite — fabricated-citation signal
+                findings.append(CitationFinding(ref, CitationStatus.FLAGGED, "parser"))
+                continue
+            elif _TRUNCATED_MEDIUM.match(ref):
+                # incomplete citation form — can never verify; flagged for human review
+                findings.append(CitationFinding(ref, CitationStatus.FLAGGED, "parser"))
+                continue
             else:
                 f = await check_frl(ref, c)
             findings.append(f or CitationFinding(ref, CitationStatus.UNVERIFIED, "parser"))

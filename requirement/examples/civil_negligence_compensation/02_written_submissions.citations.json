@@ -6,13 +6,21 @@
   "citations": [
     {
       "raw": "[2014] NSW 687",
-      "status": "unverified",
-      "source": "parser"
+      "status": "flagged",
+      "source": "parser",
+      "url": null
     },
     {
-      "raw": "Act 2002",
+      "raw": "Civil Liability Act 2002 (NSW)",
       "status": "unverified",
-      "source": "parser"
+      "source": "parser",
+      "url": null
+    },
+    {
+      "raw": "Civil Liability Act 2002",
+      "status": "unverified",
+      "source": "parser",
+      "url": null
     }
   ]
 }
