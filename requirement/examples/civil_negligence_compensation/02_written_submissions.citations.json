@@ -1,0 +1,18 @@
+{
+  "file": "civil_negligence_compensation/02_written_submissions.txt",
+  "verifier": "app.citations.service.verify_citations (production path)",
+  "offline_run": true,
+  "note": "statuses: verified needs live source concurrence; this offline run pins unverified/flagged honesty defaults",
+  "citations": [
+    {
+      "raw": "[2014] NSW 687",
+      "status": "unverified",
+      "source": "parser"
+    },
+    {
+      "raw": "Act 2002",
+      "status": "unverified",
+      "source": "parser"
+    }
+  ]
+}

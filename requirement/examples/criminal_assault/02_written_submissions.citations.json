@@ -1,0 +1,18 @@
+{
+  "file": "criminal_assault/02_written_submissions.txt",
+  "verifier": "app.citations.service.verify_citations (production path)",
+  "offline_run": true,
+  "note": "statuses: verified needs live source concurrence; this offline run pins unverified/flagged honesty defaults",
+  "citations": [
+    {
+      "raw": "Act 1900",
+      "status": "unverified",
+      "source": "parser"
+    },
+    {
+      "raw": "Act 2019",
+      "status": "unverified",
+      "source": "parser"
+    }
+  ]
+}
