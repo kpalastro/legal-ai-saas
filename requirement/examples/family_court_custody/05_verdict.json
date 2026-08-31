@@ -1,0 +1,5 @@
+{
+  "verdict": "{\"lower\": 60, \"point\": 85, \"upper\": 100}",
+  "model": "qwen3.5-fast:latest",
+  "note": "not legal advice"
+}

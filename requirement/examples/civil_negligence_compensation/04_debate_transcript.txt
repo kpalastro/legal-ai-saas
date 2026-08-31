@@ -1,0 +1,35 @@
+TURN 1 — user_advocate (plaintiff_opening)
+----------------------------------------------------------------------
+The defendant hotel owes a fundamental duty of occupation under the Civil Liability Act to manage known crowd hazards and maintain adequate lighting on its own-promoted ride-share zone, which it actively promoted via social media without sufficient security or supervision at that time; furthermore, while the footpath is council property, the plaintiff's expert evidence confirms the 11 lux level was below the required AS/NZS standard of 20 lux for a high-pedestrian area. The gravity and probability of harm are substantial given his prior assault history on this specific location, which directly correlates to the current injury mechanism; mitigating costs such as additional security guards or lighting upgrades would be trivially cheap against the hotel's licensed turnover compared to their actual financial loss from negligence.
+
+TURN 2 — opponent (defendant_opening)
+----------------------------------------------------------------------
+The plaintiff's reliance on the but-for test for causation is fundamentally flawed because it ignores that a pedestrian falling from a height onto concrete requires no active intervention; merely being present at the site would not have prevented this specific injury mechanism, rendering your mitigation arguments trivially ineffective against the gravity of the actual harm. Furthermore, while you argue security guards were sufficient to mitigate risk, they are licensed only for Friday and Saturday nights on Sunday evenings—a temporal gap that creates an unquantifiable but material breach in a high-pedestrian zone where lighting alone is insufficient to ensure safety under AS/NZS 1158 standards. Finally, the plaintiff's claim of "social utility" fails because it ignores the statutory duty owed by occupiers to patrons who are actively engaging with their premises; your defense relies on circumstantial evidence that does not satisfy the required causal link between your actions and the specific injury sustained.
+
+TURN 3 — judge (judge_initial_belief)
+----------------------------------------------------------------------
+{"lower": 68, "point": 79, "upper": 85}
+
+TURN 4 — user_advocate (plaintiff_rebuttal)
+----------------------------------------------------------------------
+The defendant's reliance on the but-for test is fundamentally flawed because it ignores the fundamental principle of causation that a third party cannot be held liable for an injury caused by their own negligence or intentional acts, even if they are present at the time; therefore, security guards could not have prevented this specific fall. Furthermore, while lighting engineering evidence supports the causal link between low illumination and the mechanism of injury, it does not negate the defendant's prior duty to manage a known crowd hazard on social media that directly contributed to the risk profile for both parties involved in the assault three months earlier; thus, they are liable under s 5B. Finally, regarding mitigation costs at ~$102/hr versus $63/hour and improved lighting from an expert assessment of only 11 lux against a recommended standard of 20 lux, these expenses represent trivial trifles compared to the hotel's licensed turnover and the significant social utility gained by maintaining that active pick-up zone.
+
+TURN 5 — opponent (defendant_rebuttal)
+----------------------------------------------------------------------
+The defendant's defense relies on the Plaintiff's reliance on a "social utility" of an activity that is inherently dangerous and potentially fatal to vulnerable pedestrians, arguing this outweighs their specific claims regarding lighting standards which are already sufficient for high-pedestrian zones under AS/NZS 1158. Furthermore, they contend that while security presence mitigates the probability of escalation in a crowded environment, it does not negate the gravity of an actual injury sustained by someone who is actively engaging with public infrastructure and has no reasonable expectation of safety at such times; therefore, their mitigation argument fails to account for the fundamental danger inherent in ride-share pick-up zones where patrons are physically vulnerable.
+
+TURN 6 — judge (judge_mid_belief)
+----------------------------------------------------------------------
+{"lower": 78, "point": 93, "upper": 100}
+
+TURN 7 — user_advocate (plaintiff_closing)
+----------------------------------------------------------------------
+The plaintiff argues that the hotel breached its occupier's duty by failing to manage a known crowd-hazard on social media and invite patrons into an area where they could be pushed, thereby creating a foreseeable risk of injury under s 5B Civil Liability Act 2002. While mitigation claims for security guards or lighting are trivial compared to the hotel's turnover, these costs do not negate the gravity of the harm caused by the failure to prevent the assault and subsequent fall. Furthermore, Adeels Palace v Moubarak establishes that a reasonable inference can be drawn from expert evidence showing insufficient footpath lighting at 11 lux against an AS/NZS recommendation of 20 lux; this gap is sufficient for causation in negligence claims regarding pedestrian hazards. Consequently, the plaintiff contends their claim should proceed despite these minor cost elements because they directly address the core breach and causal link between the hotel's failure to manage its activity area.
+
+TURN 8 — opponent (defendant_closing)
+----------------------------------------------------------------------
+The defendant's defense relies on the plaintiff's reliance on a prior assault and an inadequate lighting engineer report to establish causation; however, these factors are insufficient because they do not negate the physical injury or the gravity of the harm suffered by the injured party at the time of the incident. Furthermore, while mitigation costs were trivially low against turnover figures, they fail to address the specific breach regarding security presence and crowd management that directly contributed to the pedestrian hazard; therefore, these elements are inadequate for a complete rebuttal under both statutory and common law principles.
+
+TURN 9 — judge (judge_final_verdict)
+----------------------------------------------------------------------
+{"lower": 68, "point": 72, "upper": 80}

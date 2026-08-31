@@ -1,0 +1,72 @@
+WRITTEN SUBMISSIONS
+
+Matter: R —v— Nguyen (common assault — s 61 Crimes Act 1900 (NSW))
+Jurisdiction: NSW Local Court
+Prepared with AI assistance (LexSim AI) — does not replace legal advice. Verify every citation before filing.
+
+**SUBMISSIONS TO THE COURT OF APPEAL (NSW)**  
+**IN THE MATTER OF [Defendant Name]** v. **[Victim's Name/Plaintiff]**  
+
+### I. INTRODUCTION AND STATEMENT OF FACTS
+
+This submission is made in support of the Plaintiff, seeking to dismiss this criminal case on the grounds that it fails to meet the statutory elements required under Section 418 of the *Crimes Act 2019* (NSW) for a conviction of Common Assault. The core contention rests upon two pillars: the sufficiency of evidence regarding the defendant's application of force, and the reliability of his silence as an element of self-defence.
+
+**I. Evidence Regarding Application of Force**
+The prosecution brief establishes that on 14 June 2026 at approximately 22:40 outside the Star Hotel in Newtown, Defendant [Defendant Name] (the "defendant") was alleged to have pushed Victim [Victim's Name], Mr Liam O'Brien ("the complainant"), into a confined space. The specific allegation is that this push occurred after an argument regarding a pooled-ride booking and resulted in the fall of the complainant onto the footpath, causing him sprained left wrist and 2cm graze to right elbow.
+
+The prosecution relies on two primary pieces of evidence:
+1.  **Video Evidence:** Two mobile phone videos exist. The first video (4m away) clearly shows Defendant pushing Victim into a confined space; the second video captures the preceding verbal exchange but cuts off at exactly four seconds prior to the push.
+2.  **Officer-in-Charge Statement:** An officer in charge stated that police were called by a bystander and attended at approximately 22:52, consistent with the timing of Defendant's alleged action (approx. 10 minutes after the verbal exchange).
+
+**II. The Elements of Common Assault under Section 418 Crimes Act 1900 (NSW)**
+The defence submits that for a conviction to proceed beyond reasonable doubt, three elements must be proven:
+(a) Application of force;  
+(b) Intentional or reckless application; and  
+(c) Without consent or lawful excuse.
+
+**A. Element (i): The Defendant Applied Force**
+This element is satisfied by the prosecution's evidence regarding both video footage and officer testimony. Video evidence provides a direct, unambiguous visual confirmation that Defendant applied physical force to Victim during the alleged incident. Officer-in-Charge corroborated this with police call-by-call status at 22:52. There is no indication in either source of any other motive or reason for the push beyond the context described (argument about pooled-ride booking).
+
+**B. Element (ii): Application was Intentional or Reckless, and Without Consent/Lawful Excuse**
+This element requires a higher standard than mere negligence; it demands an intent to harm or recklessness in the application of force that is not excused by law. The defence argues this is **not met**.
+
+1.  **The Nature of Silence (RPS v R):** In *RPS v R* [2019] NSWCA, the Court held that a defendant's silence on an ERISP interview does not constitute evidence to support or refute their claim of self-defence under s 418. The jury must be directed to consider whether they can infer intent from silence based solely on lack of verbal response (e.g., "I didn't say anything").
+2.  **Analogy in Local Court:** Applying this principle analogously here, a defendant's failure to make an ERISP statement does not automatically prove the absence of self-defence or that their application was lawful. The jury must consider whether they can infer intent from silence based on lack of verbal response (e.g., "I didn't say anything").
+3.  **The Role of Context:** While Defendant's silence is relevant to his *claim* of self-defence, it does not automatically negate the prosecution's claim that he applied force without consent or lawful excuse. The mere absence of a statement cannot be equated with an intentional application of force in this context.
+
+**C. Element (iii): Without Consent/Lawful Excuse**
+The defence argues that Defendant has no prior record and intends to plead not guilty, suggesting the lack of evidence for "lawful excuse" is sufficient to disqualify him from a conviction under s 418. However, this argument relies on an assumption about his mental state (intentional or reckless) rather than objective facts regarding how he applied force.
+
+**III. The Mechanism and Intent: A Dispute Over the Nature of the Fall**
+The defence contends that the prosecution's evidence is insufficient to prove Defendant was acting intentionally, specifically because it leaves open two competing inferences regarding the mechanism of injury (a deliberate push vs. a stumble). This creates an element of doubt for both parties on how "force" and "intent" were applied.
+
+1.  **The Low-Energy Report:** The defence has retained a neuro-physio report noting that the fall was 'low-energy' and consistent with either a push or a stumble.
+2.  **Victim's Statement:** Victim [Victim's Name] stated he could not recall exactly how he fell, only stating "I felt a push." This statement is critical for establishing intent but does not automatically prove that the force was applied intentionally without consent; it merely confirms there was contact and some sensation of resistance.
+
+**IV. The Critical Gap: The 4-Second Delay in Video Evidence**
+The defence argues this gap between the verbal exchange (approx. 3 seconds prior) and the push is significant enough to cast doubt on whether Defendant held a "reasonable belief" that he needed to intervene defensively.
+
+*   **Video A:** Shows the push from approximately 4 meters away, clearly establishing force without consent or lawful excuse in its immediate context.
+*   **Video B (The Cut-off):** Captures the preceding verbal exchange but cuts off at exactly four seconds before the actual push occurred. The prosecution has not provided any explanation for this delay beyond what is stated by Officer-in-Charge ("police were called...").
+
+**V. Requesting a Jones v Dunkel Inference**
+To resolve the ambiguity regarding whether Defendant held a "reasonable belief" in his defensive response, and to address the lack of evidence supporting lawful excuse or consent (as implied by his clean record), the defence requests that this Court make an inference from the prosecution's failure to serve a statement from the second witness who appears in frame Video B.
+
+If the jury is satisfied that:
+1.  The defendant applied force without consent; and  
+2.  There was no evidence supporting lawful excuse or consent (due to his clean record);  
+
+Then, under *Jones v Dunkel*, it may be found that Defendant acted intentionally or recklessly in a manner consistent with self-defence.
+
+**VI. Alternative Arguments for Dismissal on Clean Record**
+If the Court is satisfied beyond reasonable doubt that all elements of Common Assault are met (force applied without consent), and considering:
+1.  The defendant's clean criminal record;  
+2.  His stable employment as an apprentice electrician for three years prior to this incident;  
+
+The defence will also invoke s 10(1)(a) dismissal on the basis that Defendant is a non-permanent offender with no serious consequences, and his minor injury does not warrant conviction under Common Assault where other factors (like lack of consent or intent) are absent.
+
+---
+**COURT OF APPEAL (NSW)**  
+*For [Defendant Name]*
+
+31 August 2026

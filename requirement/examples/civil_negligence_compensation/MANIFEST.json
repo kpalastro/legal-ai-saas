@@ -1,0 +1,11 @@
+{
+  "slug": "civil_negligence_compensation",
+  "title": "O'Brien —v— Newtown Hospitality Group (public-liability, s 5B/5D Civil Liability Act 2002 (NSW))",
+  "jurisdiction": "NSW District Court",
+  "cause_of_action": "negligence_personal_injury",
+  "plaintiff": "Liam O'Brien (Plaintiff)",
+  "defendant": "Newtown Hospitality Group Pty Ltd (First Defendant)",
+  "model": "qwen3.5-fast:latest",
+  "generated_at": "2026-08-31T20:49:29.389550+00:00",
+  "not_legal_advice": true
+}

@@ -1,0 +1,35 @@
+TURN 1 — user_advocate (plaintiff_opening)
+----------------------------------------------------------------------
+The prosecution cannot exclude self-defence beyond reasonable doubt under s 418 because there is no evidence to support a "reasonable belief" that force was necessary, as the defendant has not made any comment and his account suggests he may have been defending himself against an advancing complainant. Furthermore, despite police presence at 22:52, the ERISP interview shows silence on what happened after the fall, which is insufficient to exclude self-defence under RPS v R; Azzopardi. The jury must be directed that they consider both a defensive brace and a reflexive push as equally possible mechanisms for this low-energy injury given the lack of corroborating evidence regarding intent or consent.
+
+TURN 2 — opponent (defendant_opening)
+----------------------------------------------------------------------
+The Crown cannot exclude self-defence beyond reasonable doubt under s 418 because the prosecution failed to establish that the defendant applied force with a specific intent or recklessness, leaving his account of "low-energy" injury and lack of prior record as sufficient evidence for conviction on common assault. Furthermore, while the jury direction regarding silence is analogously applicable in this Local Court context, it cannot override the defence's submission that the 4-second gap between the approach video and push creates a significant evidentiary hole preventing the court from concluding the defendant held a reasonable belief of necessity to defend himself against an advancing complainant.
+
+TURN 3 — judge (judge_initial_belief)
+----------------------------------------------------------------------
+{"lower": 60, "point": 75, "upper": 85}
+
+TURN 4 — user_advocate (plaintiff_rebuttal)
+----------------------------------------------------------------------
+The Crown must prove beyond reasonable doubt that a push was intentional or reckless to constitute common assault under s 61; silence at an ERISP interview is not evidence of guilt, and the jury cannot be directed to infer intent from mere lack of verbal confirmation regarding how they fell. Furthermore, while the low-energy report supports defensive posture, it fails to exclude alternative inferences that a push was intentional or reckless given the victim's inability to recall details; without such an exclusion, the defendant remains liable for common assault despite his clean record and minor injury.
+
+TURN 5 — opponent (defendant_rebuttal)
+----------------------------------------------------------------------
+The prosecution relies heavily on a "Jones v Dunkel" inference to justify excluding self-defence based solely on the defendant's lack of prior record and stable employment, arguing that his honest account supports an intentional push rather than mere reflexive defense against advancing force. Furthermore, they contend that the 4-second gap in the second video is insufficient evidence because it fails to capture the full sequence of conduct required for a reasonable belief under s 61(3), rendering their argument based on silence or incomplete testimony legally weak and unsupported by any statutory guidance regarding self-defence exceptions.
+
+TURN 6 — judge (judge_mid_belief)
+----------------------------------------------------------------------
+{"lower": 70, "point": 85, "upper": 95}
+
+TURN 7 — user_advocate (plaintiff_closing)
+----------------------------------------------------------------------
+The Crown must prove beyond reasonable doubt that a push was intentional or reckless under s 418 before it can exclude self-defence, as demonstrated by the defendant's ERISP silence and lack of prior record. The jury direction on witness non-disclosure is analogous to RPS v R; Azzopardi, meaning the failure to serve the second witness' statement does not negate a reasonable belief in necessity that outweighs the defense's claim for lenient sentencing under s 10(1)(a). Furthermore, while low-energy reports and lack of exact memory suggest an intentional push is possible, they do not exclude it entirely; if the defendant held such a strong subjective belief to prevent imminent harm despite no prior record or employment history, that conviction stands.
+
+TURN 8 — opponent (defendant_closing)
+----------------------------------------------------------------------
+Your reliance on silence as a valid defense is fundamentally flawed because it ignores that self-defence requires an active application of force to create immediate danger, not merely reacting to perceived threats; the lack of comment from you during this specific encounter does not negate your intent or recklessness in initiating contact. Furthermore, while the low-energy report supports a defensive stance, the critical gap between your approach and your push creates a reasonable doubt regarding whether such an application was necessary at that moment, rendering any defense based on mere negligence insufficient to overcome the threshold for criminal liability under common assault.
+
+TURN 9 — judge (judge_final_verdict)
+----------------------------------------------------------------------
+{"lower": 60, "point": 75, "upper": 85}

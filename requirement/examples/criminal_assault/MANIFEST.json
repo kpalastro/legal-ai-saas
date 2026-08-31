@@ -1,0 +1,11 @@
+{
+  "slug": "criminal_assault",
+  "title": "R —v— Nguyen (common assault — s 61 Crimes Act 1900 (NSW))",
+  "jurisdiction": "NSW Local Court",
+  "cause_of_action": "criminal_common_assault",
+  "plaintiff": "Duy Tan Nguyen (Defendant)",
+  "defendant": "NSW Police (Prosecution)",
+  "model": "qwen3.5-fast:latest",
+  "generated_at": "2026-08-31T20:48:52.703964+00:00",
+  "not_legal_advice": true
+}

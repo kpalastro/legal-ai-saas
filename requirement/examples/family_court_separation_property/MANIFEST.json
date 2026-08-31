@@ -1,0 +1,11 @@
+{
+  "slug": "family_court_separation_property",
+  "title": "Kaur —v— Kaur (property settlement after 11-year marriage)",
+  "jurisdiction": "Federal Circuit and Family Court",
+  "cause_of_action": "family_law_property",
+  "plaintiff": "Simran Kaur",
+  "defendant": "Harpreet Kaur",
+  "model": "qwen3.5-fast:latest",
+  "generated_at": "2026-08-31T20:47:53.844575+00:00",
+  "not_legal_advice": true
+}

@@ -1,0 +1,35 @@
+TURN 1 — user_advocate (plaintiff_opening)
+----------------------------------------------------------------------
+The starting point of equal shared parental responsibility is displaced by a fundamental inability to co-decide on schooling and speech therapy logistics, which fundamentally undermines the core purpose of that statutory framework for these children. The applicant's proposal prioritizes meaningful relationships with both parents while safeguarding against harm through no allegations raised in this matter; however, the respondent's 50/50 arrangement ignores a critical need to ensure therapeutic continuity by maintaining weekly contact during periods when one parent is absent due to illness or diagnosis changes. Given that neither party has substance abuse issues and violence remains unreported, the applicant argues that equal sharing should remain valid until such time as therapy logistics can be reliably managed together without compromising either child's safety or well-being.
+
+TURN 2 — opponent (defendant_opening)
+----------------------------------------------------------------------
+The Plaintiff fails to address the fundamental medical necessity of R's ongoing speech-delay diagnosis, which is now requiring a dedicated weekly appointment that cannot be rescheduled due to distance and cost constraints; furthermore, the respondent has successfully managed this continuity since February without any allegations of substance abuse or violence.
+
+TURN 3 — judge (judge_initial_belief)
+----------------------------------------------------------------------
+{"lower": 68, "point": 75, "upper": 90}
+
+TURN 4 — user_advocate (plaintiff_rebuttal)
+----------------------------------------------------------------------
+The starting point of equal shared parental responsibility is displaced by a fundamental failure to protect R's well-being, which renders any attempt at co-decision on schooling and therapy logistics moot; the respondent has not met their statutory obligation to provide meaningful care for this child since February 2026. Furthermore, while the applicant proposes sole medical authority pending therapeutic outcomes, that decision must be made in accordance with best interests principles where a child's safety is paramount, as evidenced by R's speech-delay diagnosis and lack of alternative support systems; without such protection, any shared responsibility arrangement would violate s 61DA FLA. Finally, the respondent's proposal to move from equal sharing to staggered arrangements ignores the practical necessity for both parents to manage logistics that are currently impossible due to distance and cost barriers.
+
+TURN 5 — opponent (defendant_rebuttal)
+----------------------------------------------------------------------
+The Plaintiff's reliance on best interests, which prioritizes meaningful relationships over medical and educational stability for a child with a fresh diagnosis of speech delay, is fundamentally flawed given the applicant's demonstrated capacity to manage therapy logistics independently since February. Furthermore, the respondent ignores critical factors such as the practical difficulty and expense associated with switching between two parents at 6km distance; without an equal shared arrangement from Term 1, there would be no viable alternative for R's weekly care unless a significant portion of time is dedicated solely to medical decisions pending therapy outcomes.
+
+TURN 6 — judge (judge_mid_belief)
+----------------------------------------------------------------------
+{"lower": 70, "point": 85, "upper": 95}
+
+TURN 7 — user_advocate (plaintiff_closing)
+----------------------------------------------------------------------
+The starting point of equal shared parental responsibility is displaced by fundamental safety and therapeutic stability, which the respondent's current arrangement fails to address given their inability to co-decide on critical medical decisions or manage therapy logistics for R. The applicant must prioritize protecting children from harm while ensuring meaningful relationships with both parents; a 5-night fortnight already satisfies this requirement without compromising the child's well-being. Furthermore, the practical and financial burdens of week-long school visits are so low that they do not justify an equal split on major medical or schooling decisions pending R's therapy outcome review, which would unnecessarily delay necessary care for his speech-delay diagnosis.
+
+TURN 8 — opponent (defendant_closing)
+----------------------------------------------------------------------
+The court must recognize that while equal shared responsibility is a valid starting point, it cannot be displaced by mere logistical convenience or temporary cohabitation; the children's expressed views and their unique need for uninterrupted therapy continuity require more than just weekend proximity to maintain meaningful relationships. Furthermore, refusing to adjust parenting arrangements solely because one parent manages medical decisions alone creates an imbalance that harms both parties' best interests in a way that contradicts the statutory requirement of protecting from harm through consistent care planning.
+
+TURN 9 — judge (judge_final_verdict)
+----------------------------------------------------------------------
+{"lower": 60, "point": 85, "upper": 100}

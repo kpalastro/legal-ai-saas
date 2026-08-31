@@ -1,0 +1,35 @@
+TURN 1 — user_advocate (plaintiff_opening)
+----------------------------------------------------------------------
+Your reliance on s 79(2)(o) justice-and-equity catchall is fundamentally flawed because it treats a disparity between two parties as merely an administrative error rather than a genuine imbalance of needs that warrants equitable adjustment under the Family Court Act 1968. While your financial contributions are substantial, they were made during marriage and before separation; once separated in May 2026, you ceased to contribute financially or non-financially for those years, rendering any claim based on pre-separation contributions voidable at law without a valid legal basis under s 79(4)(a). Furthermore, your assertion that the Respondent's superannuation and earning capacity are "materially higher" ignores the fundamental principle of fairness: equal contribution to an asset pool is not merely equitable but mandatory. A court must ensure no party retains more than half their net worth in a joint property arrangement where one party has contributed significantly less, regardless of whether that disparity appears disproportionate or unaccounted for at separation.
+
+TURN 2 — opponent (defendant_opening)
+----------------------------------------------------------------------
+The respondent argues that s 79(1)(b) is satisfied by a substantial non-financial contribution from her as homemaker and primary parent of two children, which she has maintained for five years without financial compensation or record maintenance costs to the applicant's detriment. Furthermore, they contend that while their superannuation contributions are significant, the court must weigh them against the respondent's higher earning capacity (145k/yr) and untouched pension fund compared to the applicant's reduced electrical trade prospects at 44 years old. Finally, by asserting a just-and-equitable outcome of roughly 60% in her favor rather than an automatic split between equal shares, they demonstrate that their contribution is not merely nominal but materially alters the financial landscape for both parties' future needs and stability.
+
+TURN 3 — judge (judge_initial_belief)
+----------------------------------------------------------------------
+{"lower": 50, "point": 68, "upper": 79}
+
+TURN 4 — user_advocate (plaintiff_rebuttal)
+----------------------------------------------------------------------
+Your reliance on s 79(2)(o) is fundamentally flawed because it treats a disparity between two parties as an absolute bar to equity, ignoring the specific context of this case where you are facing significant financial hardship and have no other assets available for distribution. Furthermore, your assertion that your contributions were merely "unpaid labour" fails to account for the substantial non-financial support provided by your children's education and household management over five years; without these tangible benefits, a 60/40 split would be unjustly harsh on you. Finally, while you may have made initial contributions during separation, the s 75(2)(o) catchall provision does not allow for an arbitrary adjustment of outcomes based solely on your past performance when there is no comparable alternative asset or income stream to offset those losses; a just and equitable outcome must reflect actual economic reality rather than theoretical fairness.
+
+TURN 5 — opponent (defendant_rebuttal)
+----------------------------------------------------------------------
+Your reliance on direct financial contributions to purchase and service a mortgage is fundamentally flawed because you are not an equal partner; rather, you were the sole provider of funds for this specific asset acquisition during your marriage. Furthermore, while I acknowledge my non-financial contribution as homemaker and primary parent over five years, that does not constitute "substantial" support under s 79(4)(a) in a way that justifies an equity adjustment to offset the mortgage debt; indeed, it is precisely this lack of financial partnership that renders your claim for equitable alteration unjust. Finally, regarding future needs disparity, I am now seven years older and have no more earning capacity than you do, yet my superannuation balance remains untouched at $480k while yours has been depleted by the mortgage payments; therefore, a 60/40 split is not within the band of comparable matters.
+
+TURN 6 — judge (judge_mid_belief)
+----------------------------------------------------------------------
+{"lower": 50, "point": 78, "upper": 93}
+
+TURN 7 — user_advocate (plaintiff_closing)
+----------------------------------------------------------------------
+Your reliance on s 79(2)(o) is fundamentally flawed because it conflates a statutory catch-all provision with specific, quantifiable contributions to the asset pool; you cannot simply divide a $1.45M home and superannuation at an arbitrary ratio without proving that each party made actual financial or non-financial investment in those assets prior to 2019. Furthermore, your assertion of future-needs disparity is irrelevant when both parties are legally identical regarding their earning capacity; the respondent's ability has not diminished since marriage, nor have they contributed materially to either property beyond what was already established as joint ownership at the time of separation.
+
+TURN 8 — opponent (defendant_closing)
+----------------------------------------------------------------------
+Your reliance on s 79(2)(o) to categorize a post-separation mortgage service as 'substantial' is legally insufficient, given that the court must assess whether such contributions were actually made or if they merely represent an attempt to disguise financial support under the guise of debt. Furthermore, your argument regarding future needs fails because you have not provided specific evidence demonstrating how much of your current income and savings are being used for these two children; without concrete figures on child-rearing expenses versus other assets like the home's equity or superannuation, a 60/40 split is merely an arbitrary guess. Finally, while your non-financial contributions may be valid, you must now address how those specific financial acts were structured and documented to prove they met the threshold for 'substantial' contribution under s 79(2)(a).
+
+TURN 9 — judge (judge_final_verdict)
+----------------------------------------------------------------------
+{"lower": 60, "point": 75, "upper": 80}

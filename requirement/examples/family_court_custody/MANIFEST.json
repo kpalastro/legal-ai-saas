@@ -1,0 +1,11 @@
+{
+  "slug": "family_court_custody",
+  "title": "Kaur —v— Kaur (parenting: equal shared parental responsibility vs sole)",
+  "jurisdiction": "Federal Circuit and Family Court (Division 1)",
+  "cause_of_action": "family_law_parenting",
+  "plaintiff": "Simran Kaur",
+  "defendant": "Harpreet Kaur",
+  "model": "qwen3.5-fast:latest",
+  "generated_at": "2026-08-31T20:48:23.410356+00:00",
+  "not_legal_advice": true
+}

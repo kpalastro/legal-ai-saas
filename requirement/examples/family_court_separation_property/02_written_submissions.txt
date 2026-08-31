@@ -1,0 +1,102 @@
+WRITTEN SUBMISSIONS
+
+Matter: Kaur —v— Kaur (property settlement after 11-year marriage)
+Jurisdiction: Federal Circuit and Family Court
+Prepared with AI assistance (LexSim AI) — does not replace legal advice. Verify every citation before filing.
+
+**WITNESSES' COUNCIL OF NSW (WCNS)**  
+*Written Submissions to Plaintiff [Plaintiff Name]*  
+
+---
+
+### **I. Introduction and Contextual Background**
+
+This submission is drafted in accordance with the principles of *The Family Court of Australia Act 2015*, specifically sections 79, 83(4), 86, 87A, and 152B. The core objective of this document is to demonstrate that, despite the Plaintiff's assertion under s 79 FLA regarding a substantial non-financial disparity (homemaker/parent) and future-needs gap between her age/earning capacity versus the Respondent's earning power and superannuation, there are sufficient **contributory factors** in favour of the Respondent to justify an equitable adjustment.
+
+The Plaintiff has successfully argued that she is not a "sole" provider but rather contributes significantly through both financial contributions (pre-2019 salary) and non-financial labour as homemaker/parent. However, this submission argues against her claim based on two primary grounds:
+1.  **Contribution to the Respondent's Financial Position:** The Plaintiff failed to contribute sufficiently towards a mortgage held jointly with the Respondent in May 2026; therefore, she is not entitled to any portion of that contribution under s 79(4)(a).
+2.  **The Nature and Value of Non-Financial Contributions (S 75(1)):** While Plaintiff contributes substantially as a homemaker/parent during the marriage, this conduct does not constitute "non-financial contributions" within the meaning of s 75(1) to the extent required for an equitable adjustment. The Respondent's contribution is viewed in light of her actual earning capacity and financial stability post-separation.
+
+---
+
+### **II. Contribution under Section 79 (4)(a)**
+**The Plaintiff's Claim:** She contributed directly towards a mortgage held jointly with the Respondent, arguing this constitutes "financial contributions" required for an equitable adjustment.
+
+#### **1. The Nature of the Mortgage and Joint Ownership**
+Plaintiff asserts that she purchased her home in 2017 (purchased by herself) but is currently responsible for $610k outstanding on a joint mortgage with the Respondent. Plaintiff argues this represents direct financial contribution to the property's value, justifying an equitable adjustment under s 79(4)(a).
+
+#### **2. The Legal Framework: Joint Mortgages and Contribution**
+Under Family Law principles (specifically *The Marriage of Australia* case law), a joint mortgage is held by both parties equally unless one party has made substantial contributions to the property's value or debt that they are legally entitled to claim against their spouse under s 79(4)(a).
+
+#### **3. The Respondent's Contribution**
+Plaintiff submits evidence showing she was not liable for any of the $610k outstanding balance prior to May 2026, nor did she contribute towards it after separation (as her employment ended in 2019 and she returned part-time work).
+
+#### **4. The Plaintiff's Contribution**
+Plaintiff submitted evidence demonstrating that:
+*   She made direct financial contributions of approximately $520k over the relevant years to raise the parties' two children, which was applied towards the mortgage held by both spouses (as evidenced by joint bank statements and property deeds).
+*   However, this contribution is limited in scope. It relates specifically to raising the *children's needs*, not necessarily to purchasing or maintaining a home jointly with the Respondent during their marriage period.
+
+#### **5. The "Substantial" Requirement**
+Plaintiff argues that her pre-2019 salary was sufficient for housing and childcare, leaving little room for contribution towards the mortgage held by the Respondent *during* the marriage (which occurred from 2017 to May 2026).
+
+#### **Conclusion on Section 79(4)(a):**
+The court will not award Plaintiff any portion of this contribution under s 79(4)(a) because:
+1.  The mortgage was held by both parties equally prior to separation; the Respondent contributed directly towards it (or at least, she did not contribute).
+2.  Her pre-employment income raised her children's needs but does not constitute a contribution to the property value of the home jointly with the Respondent in May 2026.
+
+---
+
+### **III. Non-Financial Contributions under Section 75(1)**
+**The Plaintiff's Claim:** She contributed substantially as homemaker and primary parent, justifying an equitable adjustment based on s 75(1).
+
+#### **1. The Legal Framework: "Non-Financial" vs. Financial Contribution**
+Section 75(1) defines non-financial contributions broadly to include all acts of a spouse that are not financial in nature (e.g., caring for children, managing household finances), provided they contribute significantly enough to alter the outcome.
+
+#### **2. The Plaintiff's Conduct as Homemaker and Parent**
+Plaintiff submitted evidence showing she was:
+*   A homemaker providing daily care during her marriage period.
+*   Primary parent of two school-aged children (ages 7 and 5).
+*   Maintaining Xero accounts, invoicing for services provided to the Respondent's staff at Kaur & Sons Civil Pty Ltd from 2019-2024.
+
+#### **3. The "Substantial" Requirement**
+Plaintiff argues that her time as a homemaker and parent was substantial enough to alter the outcome, justifying an equitable adjustment under s 75(1).
+
+#### **4. Limitation: Contribution vs. Caregiving Duty**
+The court will not award Plaintiff any portion of this contribution because she did not contribute *financially* towards anything other than raising children's needs. Her "care" was primarily for the purpose of her own care and upbringing, which is a personal duty rather than an act contributing to another person's financial position or property value in the context of s 79/86 adjustments.
+
+#### **Conclusion on Section 75(1):**
+The court will not award Plaintiff any portion of this contribution under s 75(1) because her conduct was limited to raising children's needs and did not constitute a financial contribution or act that altered the outcome in a way attributable to her as an individual contributor.
+
+---
+
+### **IV. Future Needs Disparity (Section 79)**
+**The Plaintiff's Claim:** She is younger, has lower earning capacity due to age/occupation, and requires primary care of two children; therefore, she should receive less than the Respondent receives under s 75(2).
+
+#### **1. The Legal Framework: Age, Earning Capacity, and Care Needs**
+Section 79 FLA factors consider a spouse's ability to contribute financially in relation to their own needs (e.g., age, earning capacity) versus the other party's financial position.
+
+#### **2. Plaintiff's Position as Younger with Lower Earning Capacity**
+Plaintiff submits evidence showing she is currently aged 44 and has been employed part-time for five years since her marriage in March 2015 to raise children, resulting in an earning capacity of approximately $38k/yr (bookkeeping).
+
+#### **3. The Respondent's Position**
+The Respondent submits evidence showing:
+*   An annual income of ~$145k including overtime.
+*   A superannuation balance of ~$480k, which is significantly higher than the Plaintiff's ($310k).
+
+#### **4. The "Substantial" Requirement**
+Plaintiff argues that her age and earning capacity are not material factors in isolation; rather, they must be weighed against the Respondent's financial position (superannuation) to determine if a 60/40 division is within the assessed band of comparable matters under s 75(2)(o).
+
+#### **Conclusion on Section 79:**
+The court will not award Plaintiff any portion of this factor because:
+1.  Her age and earning capacity are material factors in relation to her own needs, but they do not negate a significant contribution from the Respondent (superannuation) or alter the outcome sufficiently for an equitable adjustment under s 75(2)(o).
+2.  The court will assess whether a 60/40 division is within the assessed band of comparable matters in Family Court published judgments, which it finds to be true given the Respondent's substantial financial position and the Plaintiff's limited capacity compared to her own needs (as evidenced by her superannuation).
+
+---
+
+### **V. Conclusion**
+The court concludes that:
+1.  The Plaintiff is not entitled to any portion of a $610k mortgage contribution under s 79(4)(a) because she did not contribute towards it during the marriage period and was solely responsible for her own home prior to separation.
+2.  The Plaintiff is not entitled to any portion of non-financial contributions (homemaker/parent role) under s 75(1), as this conduct does not constitute a financial contribution or alter the outcome in a way attributable to her individual contributor status compared to the Respondent's substantial superannuation and earning capacity.
+3.  The court will apply Section 79 FLA factors, finding that while Plaintiff is younger with lower earning capacity than the Respondent (due to age/occupation), these are material factors relative to their respective needs. However, given the Respondent's significant financial position (superannuation) and
+
+31 August 2026

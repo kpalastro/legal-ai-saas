@@ -1,0 +1,41 @@
+To: Respondent's Solicitors
+From: LexSim Legal Drafting Assistant
+Matter: O'Brien —v— Newtown Hospitality Group (public-liability, s 5B/5D Civil Liability Act 2002 (NSW))
+Date: 31 August 2026
+
+**IN THE DISTRICT COURT OF NEW SOUTH WALES, JULEY BAY DIVISION**
+
+### **NOTICE TO DEFENDANT [Client's Name]**
+
+**Date:** 28 October 2026
+
+**Subject: NOTICE OF DISCOVERY AND REQUEST FOR CONFERENCE REGARDING LIABILITY CLAIMS IN RELATION TO THE HOTEL (WILFORD STREET) – STATUTORY TIME LIMITATIONS EXPIRED**
+
+Dear Sir/Madam,
+
+This letter serves as a formal notice of discovery and request for conference under the relevant statutes governing liability claims in New South Wales. We refer to your client's insurer's letter dated 20 August 2026, which we have received with full regard to its position regarding the denial of liability by our hotel (the "Hotel").
+
+Your client asserts that the Hotel is an occupier of Wilford Street footpath zone due to its own conduct. Specifically, it actively promoted this specific zone as a pick-up point for patrons on social media between 2 November 2025 and four subsequent dates prior to your injury. We have attached relevant evidence supporting this assertion:
+
+1.  **Incident Register:** Our client's records indicate at least one common-assault event within the footpath area occurred in the ninety (90) days preceding our client's injury, a fact material to any s 5B(2) foreseeability analysis under the *Occupiers of Land and Buildings Act 1987* (*Wyong Shire Council v Shirt*).
+2.  **Lighting Engineer Report:** We attach an engineering report (dated [Insert Date]) showing that the current lighting intensity is only 11 lux at 22:15, which falls significantly below the recommended standard of 20 lux for high-pedestrian zones. This deficiency creates a reasonable expectation of harm to pedestrians and constitutes contributory negligence on our client's part.
+3.  **Occupational Therapy Assessment:** We have quantified your client's loss-of-earning capacity claim at $13,167 net to date (as of [Insert Date]).
+
+We invite you, within twenty-eight (28) days from this notice, to participate in a "without-prejudice conference" where we may discuss the quantum and factual basis for your client's liability. We understand that under s 5B(1)(b), if there is no reasonable expectation of harm as a result of negligence or fault on our part (as supported by the evidence above), then you are not required to answer any question in this matter but may still be liable for damages based solely on your own conduct.
+
+**Important Notice Regarding Limitation Periods:**
+It is critical that we note the statutory limitation period under s 5B(2) of the *Occupiers Act*. You have a strict two-year window from the date you were last in contact with our client (or, if applicable, the date your injury occurred). If this notice has not been served by [Insert Date], or if it falls within the limitation period without prejudice to any other claim arising out of that same incident, we must file a **Statement of Claim** in the District Court seeking:
+*   Compensation for damages against you (the Hotel); and
+*   Contribution from Cumberland City Council.
+
+Failure to participate in this conference or fail to respond within 28 days will result in us being compelled by law to proceed with an action at common law, which is significantly more expensive than the settlement discussed above. We expect a prompt response so that we may prepare your client for litigation if necessary and ensure all statutory deadlines are respected.
+
+We look forward to hearing from you regarding this matter within 28 days of receipt of this notice.
+
+Sincerely,
+
+**[Your Name]**
+Instructing Solicitor
+[Court Office Address]
+
+This letter was prepared with AI assistance (LexSim AI). It does not replace legal advice. Verify citations before sending.
