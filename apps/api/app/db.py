@@ -62,6 +62,14 @@ async def get_db(
     debate endpoint supplies the same JWT as a query param. Rules (security):
     identical decode path (same HMAC signature check, no looser SSE rules), and the
     token value is never logged — it is consumed here and discarded.
+
+    COMPLIANCE NOTE (RFC 6750 §2.3 / RFC 9700 §4.3.2): tokens in URI query strings
+    are discouraged (browser history, proxy/access/uvicorn access logs). This is a
+    v1-local-only accommodation because EventSource cannot set headers; production
+    alternatives, in order: native SSE via fetch()-ReadableStream (headers allowed),
+    or a short-lived one-time stream ticket minted by an authenticated POST and
+    exchanged as ?ticket=. Both are Phase-2 items under security's ?token= flag —
+    do not carry this fallback into prod.
     """
     raw = None
     if authorization and authorization.startswith("Bearer "):
