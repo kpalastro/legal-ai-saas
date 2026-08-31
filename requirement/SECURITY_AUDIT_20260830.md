@@ -58,3 +58,23 @@ impossible to reintroduce silently, same trick the `_as()` helper now uses).
 Everything else in this round (deploy's vacuous-test + `audit_log`-RLS finds, compliance's per-user-claims insight,
 testing's visibility-and-effect house rule) I verified independently and concur with — no security dissent on any
 of the three fixes; my probes agree with supervisor's numbers exactly.
+
+## Addendum — 31 Aug: ?token= fallback audit (post CORS/browser-verify round)
+
+Reviewed the `?token=` SSE fallback as shipped in the running container (probed `openapi.json` + read `app/db.py`):
+
+- **Verification path is identical to the header path** (same `decode_supabase_jwt`, same forged-token rejection)
+  — no looser SSE rule exists. Confirmed in OpenAPI: both `token` (query) and `Authorization` (header) params on
+  `GET /cases/{id}/simulate`.
+- **Live-log check:** container (`infra-api-1`, recreated 21:46 after the CORS fix) has **zero logged `token=`
+  occurrences** and zero GETs to the simulate route in its current log window — the "token value never logged"
+  claim holds as of now, but that's uvicorn default access logs, which DO print full query strings. Any future
+  `--log-level info` change or a proxy in front of uvicorn would silently start capturing tokens in plaintext
+  logs. Two hardening steps for the Phase-2 close-out of this item:
+  1. uvicorn: `--no-access-log` for the SSE route family, or a log filter that truncates `?token=…` — one config
+     line, cheap to do while the stack is small.
+  2. Prefer the fetch-ReadableStream SSE path (headers work) or the one-time stream-ticket exchange
+     (already sketched in the `get_db()` docstring) before any non-localhost deployment.
+- The COMPLIANCE_NOTE in `db.py` (RFC 6750 §2.3 / RFC 9700 §4.3.2) already says "do not carry into prod" — this
+  addendum puts a *deadline owner* on that sentence: it should close in the same PR that removes the dev-only
+  items, not drift into prod by inertia.

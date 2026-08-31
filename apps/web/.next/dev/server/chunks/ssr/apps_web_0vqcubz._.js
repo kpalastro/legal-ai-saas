@@ -322,7 +322,8 @@ function Home() {
                                     }, this),
                                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$apps$2f$web$2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
                                         className: "mt-1 whitespace-pre-wrap text-sm",
-                                        children: t.content
+                                        children: t.verdict && "lower" in t.verdict ? "Judge's final verdict is summarized below." // turn-9 content is the raw verdict JSON — the band below renders it properly (compliance: no raw JSON on screen)
+                                         : t.content
                                     }, void 0, false, {
                                         fileName: "[project]/apps/web/app/page.tsx",
                                         lineNumber: 415,
@@ -341,7 +342,7 @@ function Home() {
                                                 ]
                                             }, void 0, true, {
                                                 fileName: "[project]/apps/web/app/page.tsx",
-                                                lineNumber: 421,
+                                                lineNumber: 425,
                                                 columnNumber: 23
                                             }, this),
                                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$apps$2f$web$2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
@@ -353,7 +354,7 @@ function Home() {
                                                 ]
                                             }, void 0, true, {
                                                 fileName: "[project]/apps/web/app/page.tsx",
-                                                lineNumber: 427,
+                                                lineNumber: 431,
                                                 columnNumber: 23
                                             }, this),
                                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$apps$2f$web$2f$node_modules$2f$next$2f$dist$2f$server$2f$route$2d$modules$2f$app$2d$page$2f$vendored$2f$ssr$2f$react$2d$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$ssr$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -361,13 +362,13 @@ function Home() {
                                                 children: t.verdict.note
                                             }, void 0, false, {
                                                 fileName: "[project]/apps/web/app/page.tsx",
-                                                lineNumber: 429,
+                                                lineNumber: 433,
                                                 columnNumber: 23
                                             }, this)
                                         ]
                                     }, void 0, true, {
                                         fileName: "[project]/apps/web/app/page.tsx",
-                                        lineNumber: 419,
+                                        lineNumber: 423,
                                         columnNumber: 21
                                     }, this)
                                 ]
@@ -386,7 +387,7 @@ function Home() {
                         children: streamErr
                     }, void 0, false, {
                         fileName: "[project]/apps/web/app/page.tsx",
-                        lineNumber: 443,
+                        lineNumber: 447,
                         columnNumber: 25
                     }, this)
                 ]

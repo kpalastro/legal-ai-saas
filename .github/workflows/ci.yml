@@ -34,3 +34,12 @@ jobs:
         run: |
           ! grep -rE '"(global|apac|us|eu)\.' apps/api/app apps/api/worker \
             && echo "G8 pass: all model IDs regional"
+  # Pending item #4: fail CI when a running api container serves code that diverges
+  # from git HEAD (the stale-container gap that bit twice on 31 Aug).
+  drift:
+    runs-on: [self-hosted, macOS]   # needs local docker + running stack
+    if: github.event_name == 'push'
+    steps:
+      - uses: actions/checkout@v4
+      - name: Drift check — container vs working tree
+        run: infra/scripts/drift_check.sh
