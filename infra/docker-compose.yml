@@ -63,7 +63,7 @@ services:
 
   api:
     build: ../apps/api
-    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload --log-config log_config.json  # token-scrub filter (security audit 31 Aug)
     environment:
       LLM_PROVIDER: ollama
       # SECURITY S4: daemon stays on host loopback; containers reach it via
