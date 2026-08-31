@@ -28,12 +28,23 @@ class TokenScrubFilter:
 
     def filter(self, record: logging.LogRecord) -> bool:
         try:
-            # Scrub the raw msg FIRST — record.msg is where the full request line
-            # (and its query string) lives regardless of args shape; getMessage()
-            # can throw when tuple args meet %-mapping placeholders.
+            # Scrub the raw msg FIRST — for pre-formatted records the JWT is here.
             scrubbed = _TOKEN_RE.sub(REDACTED, record.msg)
             if scrubbed != record.msg:
-                record.msg = scrubbed  # redacted in-place; args stay for the formatter
+                record.msg = scrubbed
+        except Exception:
+            pass
+        try:
+            # Uvicorn access logs put the request line in record.args, NOT msg:
+            # AccessFormatter receives (client_addr, method, full_path, http_ver,
+            # status) and builds request_line at format time — record.msg is just
+            # the %-template with no 'token=' in it. Scrub every args string.
+            args = record.args
+            if args:
+                record.args = tuple(
+                    _TOKEN_RE.sub(REDACTED, a) if isinstance(a, str) else a
+                    for a in (args if isinstance(args, tuple) else (args,))
+                ) or args
         except Exception:
             pass  # never break logging on a scrub failure
         return True
