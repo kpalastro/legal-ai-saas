@@ -53,35 +53,50 @@ pytestmark_no_db = pytest.mark.skipif(not _db_available(), reason="no Postgres r
 SQL_SETUP = [
     """
     INSERT INTO auth.users (id) VALUES ('00000000-0000-0000-0000-0000000000aa')
-    ON CONFLICT (id) DO NOTHING
+    ON CONFLICT DO NOTHING
     """,
     """
     INSERT INTO users (id, email, role) VALUES ('00000000-0000-0000-0000-0000000000aa',
       'qa-a@test.local', 'individual')
-    ON CONFLICT (id) DO NOTHING
+    ON CONFLICT DO NOTHING
     """,
     """
     INSERT INTO cases (id, user_id, title, jurisdiction, cause_of_action)
     VALUES ('00000000-0000-0000-0000-0000000000c1', '00000000-0000-0000-0000-0000000000aa',
-      'QA G5 case', 'NSW Supreme Court', 'contract_breach')
-    ON CONFLICT (id) DO NOTHING
+      '[TEST] audit append-only fixture case', 'NSW Supreme Court', 'contract_breach')
+    ON CONFLICT DO NOTHING
     """,
 ]
+
+
+async def _purge_fixture(engine) -> None:
+    """Remove this module's fixture rows after the run.
+
+    QA/TEST_PLAN §9 rule: test data must NEVER surface in the demo case list.
+    The audit_log app-role trigger blocks the case FK cascade, so the trail rows
+    are superuser-deleted via session_replication_role (§8.4 escape hatch).
+    """
+    async with engine.begin() as conn:
+        await conn.execute(text("SET LOCAL session_replication_role = replica"))
+        await conn.execute(
+            text("DELETE FROM audit_log WHERE case_id = '00000000-0000-0000-0000-0000000000c1'")
+        )
+        await conn.execute(text("SET LOCAL session_replication_role = DEFAULT"))
+        await conn.execute(text("DELETE FROM cases WHERE id = '00000000-0000-0000-0000-0000000000c1'"))
+        await conn.execute(text("DELETE FROM users WHERE id = '00000000-0000-0000-0000-0000000000aa'"))
+        await conn.execute(text("DELETE FROM auth.users WHERE id = '00000000-0000-0000-0000-0000000000aa'"))
 
 
 @pytest_asyncio.fixture
 async def db():
     eng = create_async_engine(DSN)
+    await _purge_fixture(eng)  # clear any stale fixture row from an earlier crashed run
     async with eng.begin() as conn:
         for stmt in SQL_SETUP:
             await conn.execute(text(stmt))
     yield eng
     await eng.dispose()
-    # cleanup straight through (fixture connection may lack bypass perms)
-    cleanup = create_async_engine(
-        DSN.replace("lexsim:", "postgres:").replace(":5432/", ":5432/"),
-        connect_args={}, # type: ignore[arg-type]
-    )
+    await _purge_fixture(eng)  # never leave '[TEST] ...' rows behind for a demo
 
 
 @pytest.mark.usefixtures("db")

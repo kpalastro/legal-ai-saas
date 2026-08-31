@@ -195,3 +195,16 @@ First true end-to-end run against the live localhost stack (real GoTrue token �
 
 - Missing/invalid Bearer → clean 401 JSON.
 - Forged-secret token → 401 (signature rejected in decode).
+---
+
+## 9. Test-Data Hygiene Rule (2026-08-31, @testing)
+
+**Test fixtures must never deposit rows a demo or the UI can see.** The G5 suite seeded `QA G5 case` with no teardown — a test run silently re-deposited it into the live demo case list *after* manual cleanup, twice.
+
+**Rules now in force:**
+
+1. Suite-managed fixtures use unambiguous names (`[TEST] ...`) and a fixture-scoped purge (`_purge_fixture`: deletes seed rows before AND after the run, via the §8.4 `session_replication_role` escape hatch for append-only-locked rows).
+2. Any probe that creates live rows (SSE/auth E2Es included) belongs to the prober — revert before the round ends, and state the post-cleanup counts in the room so the next reader trusts the DB state.
+3. Pre-demo check that takes 5 seconds: `select (select count(*) from cases), (select count(*) from users) filter-less totals + titles`. Expect exactly the demo seed set and nothing else.
+
+**Status:** `test_audit_append_only.py` fixtures migrated to the rule (title `[TEST] audit append-only fixture case`, purge before+after, verified 6/6 green with zero residue). RLS suite (§8) already used module-scoped fresh UUIDs + teardown — no change needed. This closes supervisor pending item #4.
