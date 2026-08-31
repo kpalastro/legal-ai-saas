@@ -258,6 +258,15 @@ def upgrade() -> None:
         """
     )
     op.execute("ALTER TABLE audit_content ENABLE ROW LEVEL SECURITY;")
+    # the app role writes/reads the content store (LPP reconstruction); tenants never do
+    op.execute(
+        """
+        CREATE POLICY audit_content_write_backend ON audit_content
+          FOR INSERT TO lexsim_app WITH CHECK (true);
+        CREATE POLICY audit_content_read_backend ON audit_content
+          FOR SELECT TO lexsim_app USING (true);
+        """
+    )
     op.execute(
         """
         CREATE POLICY audit_log_read_owner ON audit_log
@@ -269,6 +278,8 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
+    op.execute("DROP POLICY IF EXISTS audit_content_write_backend ON audit_content;")
+    op.execute("DROP POLICY IF EXISTS audit_content_read_backend ON audit_content;")
     op.execute("DROP TABLE IF EXISTS audit_log CASCADE;")
     op.execute("DROP TABLE IF EXISTS audit_content CASCADE;")
     op.execute("DROP TABLE IF EXISTS deadlines CASCADE;")

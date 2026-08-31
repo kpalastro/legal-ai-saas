@@ -171,3 +171,27 @@ Items 2.2, 2.5, 2.6 are doc/config reviews (no automated test in v1) — tracked
 **Helper:** `scripts/run_migrations.py [dsn]` applies raw-SQL migrations to a fresh test DB (splits multi-statement `op.execute` blocks for asyncpg, which rejects multi-command prepared statements). CI uses the same path.
 
 **Setup note for @deploy:** compose postgres host port was remapped to **5434** (5432/5433 already allocated by other stacks on this machine) — env/URLs must follow.
+
+
+---
+
+## 8.1 Live E2E Proof (2026-08-31, @testing) — full auth→debate→audit chain
+
+First true end-to-end run against the live localhost stack (real GoTrue token → FastAPI → RLS → Ollama → DB):
+
+1. `POST /auth signup` on GoTrue (:9999) → returns JWT with `aud:""` (decoder fix handles this).
+2. `POST /cases` with that JWT → **201**, row created under the verified `sub`, RLS scoped.
+3. `GET /cases/{id}/simulate` (SSE) → **9 `event: turn` frames + `done`**, final JUDGE verdict carries the calibrated range `{lower, point, upper}` + "not legal advice" note — G6 structure correct over the wire, not just in-process.
+4. Trail: `audit_log` rows written with `content_ref` populated for every turn (LPP-reconstructable), event names `debate_turn_1..9`.
+5. Suite: 33/33 including the audit-contract test as `lexsim_app`.
+
+### QA bugs found & fixed during this probe
+
+- **`create_case`/`simulate_sse` called async `_caller_sub` without `await`** → 500 on first real request (masked until now because no router had ever been hit end-to-end). Fixed in `app/routers/cases.py`.
+- **FK hole:** the `users` mirror row never existed on first request — GoTrue lives in its own `gotrue` DB, so `users.id` FK had no target before case insert. Fixed with a verified-claims mirror upsert in `create_case` (`session.info` carries sub/email from `get_db`; never client input). One probe user needed a manual `auth.users` backfill — fresh envs are fine because signup→case happens in order.
+- **29-byte JWT secret (compliance blocker):** `infra/.env` now sets a 64-char `GOTRUE_JWT_SECRET` (RFC 7518 floor); both compose services read it. @compliance's prod-path blocker resolved; rotation = restart.
+
+### Negative auth (verified live)
+
+- Missing/invalid Bearer → clean 401 JSON.
+- Forged-secret token → 401 (signature rejected in decode).

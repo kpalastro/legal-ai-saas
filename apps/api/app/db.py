@@ -15,6 +15,7 @@ from __future__ import annotations
 from collections.abc import AsyncGenerator
 
 import jwt  # pyjwt
+from fastapi import Header, HTTPException
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
@@ -24,36 +25,53 @@ settings = get_settings()
 engine = create_async_engine(settings.database_url, pool_size=10, max_overflow=20)
 SessionFactory = async_sessionmaker(engine, expire_on_commit=False)
 
-# Nothing in the app is exempt: every DB-touching request must present a valid token.
-_AUDIT_WRITER_CLAIMS = '{"role": "authenticated"}'
-
 
 def decode_supabase_jwt(token: str) -> dict:
-    """Verify signature + exp against the GoTrue/Supabase secret. Raises on forgery."""
+    """Verify signature + exp against the GoTrue/Supabase secret. Raises on forgery.
+
+    NOTE: self-hosted GoTrue v2.196 issues `aud: ""` on access tokens (verified live);
+    hosted Supabase sets `aud: "authenticated"`. Accept either — the signature check
+    against the shared secret is the security boundary; the audience filter is not.
+
+    COMPLIANCE/ROOT-CAUSE (30 Aug, aud fix verified live): passing audience="authenticated"
+    makes pyjwt raise MissingRequiredClaimError("aud") for aud:"" tokens — and that
+    exception is NOT a subclass of InvalidAudienceError in this pyjwt, so the old
+    except-InvalidAudienceError fallback could never fire. Single-call form below
+    verifies signature + exp + sub but not aud; forged-secret tokens still rejected
+    (test_rls / probe: wrong-key token -> InvalidSignature/DecodeError).
+    """
     return jwt.decode(
         token,
         settings.supabase_jwt_secret,
         algorithms=["HS256"],
-        audience="authenticated",
-        options={"require": ["exp", "sub"]},
+        options={"require": ["exp", "sub"], "verify_aud": False},
     )
 
 
-async def get_db(authorization: str | None = None) -> AsyncGenerator[AsyncSession, None]:
+async def get_db(
+    authorization: str | None = Header(default=None, alias="Authorization"),
+) -> AsyncGenerator[AsyncSession, None]:
     """Yield a session whose request.jwt.claims carry the VERIFIED caller's claims.
 
     SECURITY: the claims string is built ONLY from the cryptographically verified
-    payload — never from any client-supplied blob (a client who could set
-    request.jwt.claims directly would own every tenant's rows). Requests without
-    a valid Bearer token get NO session at all.
+    payload — never from a client-supplied blob. Requests without a valid Bearer
+    token get NO session at all (fail closed).
     """
     if not authorization or not authorization.startswith("Bearer "):
-        raise PermissionError("Missing or malformed Authorization header — RLS requires a verified JWT")
-    claims = decode_supabase_jwt(authorization.removeprefix("Bearer "))
+        raise HTTPException(status_code=401, detail="missing or malformed Authorization header")
+    try:
+        claims = decode_supabase_jwt(authorization.removeprefix("Bearer "))
+    except jwt.InvalidTokenError as exc:
+        raise HTTPException(status_code=401, detail=f"invalid token: {exc}") from None
     sub = claims["sub"]
+    email = claims.get("email") or f"{sub}@unknown.local"
     async with SessionFactory() as session:
         await session.execute(
             text("SELECT set_config('request.jwt.claims', :claims, true)"),
             {"claims": f'{{"sub": "{sub}", "role": "authenticated"}}'},
         )
+        # Verified claims on the session info dict — routers use these for the
+        # auth.users -> users mirror upsert (never client-supplied values).
+        session.info["user_sub"] = sub
+        session.info["user_email"] = email
         yield session
