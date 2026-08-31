@@ -17,3 +17,8 @@ htmlcov/
 .env
 .DS_Store
 bots/
+
+# Next.js build/cache outputs — never versioned (302 tracked .next files polluting status)
+.next/
+node_modules/
+*.log
