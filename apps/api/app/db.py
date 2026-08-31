@@ -50,17 +50,28 @@ def decode_supabase_jwt(token: str) -> dict:
 
 async def get_db(
     authorization: str | None = Header(default=None, alias="Authorization"),
+    token: str | None = None,  # SSE-only query-param fallback (?token=…)
 ) -> AsyncGenerator[AsyncSession, None]:
     """Yield a session whose request.jwt.claims carry the VERIFIED caller's claims.
 
     SECURITY: the claims string is built ONLY from the cryptographically verified
     payload — never from a client-supplied blob. Requests without a valid Bearer
     token get NO session at all (fail closed).
+
+    ?token= fallback (S4-audit item): EventSource cannot send headers, so the SSE
+    debate endpoint supplies the same JWT as a query param. Rules (security):
+    identical decode path (same HMAC signature check, no looser SSE rules), and the
+    token value is never logged — it is consumed here and discarded.
     """
-    if not authorization or not authorization.startswith("Bearer "):
+    raw = None
+    if authorization and authorization.startswith("Bearer "):
+        raw = authorization.removeprefix("Bearer ")
+    elif token:
+        raw = token  # EventSource-only surface, identical verification below
+    if not raw:
         raise HTTPException(status_code=401, detail="missing or malformed Authorization header")
     try:
-        claims = decode_supabase_jwt(authorization.removeprefix("Bearer "))
+        claims = decode_supabase_jwt(raw)
     except jwt.InvalidTokenError as exc:
         raise HTTPException(status_code=401, detail=f"invalid token: {exc}") from None
     sub = claims["sub"]
