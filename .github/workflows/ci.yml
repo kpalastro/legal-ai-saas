@@ -29,7 +29,9 @@ jobs:
       - run: uv run alembic upgrade head
         working-directory: apps/api
         env:
-          LEXSIM_DATABASE_URL: postgresql+asyncpg://postgres:postgres@localhost:5432/lexsim
+          # CI service container publishes postgres on :5432 (not dev :5434);
+          # settings read DATABASE_URL directly (no env prefix)
+          DATABASE_URL: postgresql+asyncpg://postgres:postgres@localhost:5432/lexsim
       # Gates G6/G3/C6 now; G1/G2/G5 (DB/RLS) + G7 (AustLII deny-list) wire up in next PRs.
       - run: uv run pytest --cov=app --cov-fail-under=80
         working-directory: apps/api
@@ -46,4 +48,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Drift check — container vs working tree
-        run: infra/scripts/drift_check.sh
+        # Runner checkout is a different clone: compare container against
+        # apps/api *from the checked-out ref* by re-pointing the script's cd.
+        run: |
+          git -C "$GITHUB_WORKSPACE" rev-parse --show-toplevel
+          infra/scripts/drift_check.sh
