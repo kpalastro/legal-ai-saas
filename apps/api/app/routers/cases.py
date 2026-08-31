@@ -65,7 +65,7 @@ async def create_case(body: CaseCreate, db: AsyncSession = Depends(get_db)) -> d
         ),
         {"u": sub, "t": body.title, "j": body.jurisdiction, "a": body.cause_of_action},
     )
-    row = result.first()
+    row = result.one()  # RETURNING guarantees exactly one row for a successful INSERT
     await db.commit()
     return {"id": str(row.id), "status": str(row.status)}
 
