@@ -45,8 +45,8 @@ SETUP = [
     # shared multi-row statement with .replace() collapses both rows onto one
     # id (users_pkey violation); CA/CB stay module-level per the docstring.
     f"INSERT INTO auth.users (id) VALUES ('{UA}'), ('{UB}') ON CONFLICT DO NOTHING",
-    f"""INSERT INTO users (id, email, role) VALUES
-        ('{{uid}}', 'rls-a-{{u8}}@test.local', 'individual')""",
+    """INSERT INTO users (id, email, role) VALUES
+        ('{uid}', 'rls-a-{u8}@test.local', 'individual')""",
     f"""INSERT INTO cases (id, user_id, title, jurisdiction, cause_of_action)
         SELECT s.id, s.uid, s.title, 'NSW Supreme Court', 'contract_breach'
         FROM (VALUES ('{CA}'::uuid, '{UA}'::uuid, 'A-case'),

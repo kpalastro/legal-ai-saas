@@ -27,13 +27,7 @@ DSN = os.environ.get(
     "LEXSIM_TEST_DATABASE_URL", "postgresql+asyncpg://postgres:postgres@localhost:5434/lexsim"
 )
 
-pytestmark = [pytest.mark.compliance, pytest.mark.skipif(
-    not os.environ.get("LEXSIM_TEST_DATABASE_URL")
-    and not _db_available()
-    if False
-    else False,
-    reason="",
-)]  # replaced by explicit skip logic below
+pytestmark = [pytest.mark.compliance]  # explicit skip logic below (runs only with a DB)
 
 UA = str(uuid.uuid4())
 CASE = str(uuid.uuid4())

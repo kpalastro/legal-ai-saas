@@ -7,10 +7,9 @@ The AI-disclosure footer is appended server-side — templates cannot omit it.
 
 from __future__ import annotations
 
-import html
 from datetime import UTC, datetime
 
-from jinja2 import Environment, BaseLoader
+from jinja2 import Environment
 
 DISCLOSURE_FOOTER = (
     "This document was prepared with AI assistance (LexSim AI). "

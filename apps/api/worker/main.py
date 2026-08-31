@@ -58,7 +58,6 @@ async def run_simulation(ctx: dict, case_id: str, user_id: str) -> dict:
 
 async def persist_result(conn, *, case_id: str, transcript: list[dict]) -> None:
     """Persist transcript + calibrated verdict on a simulations row for the case."""
-    verdict = transcript[-1].get("verdict") if transcript else {}
     await conn.execute(
         text(
             "INSERT INTO simulations (case_id, debate_transcript, outcome_prediction)"
@@ -67,7 +66,7 @@ async def persist_result(conn, *, case_id: str, transcript: list[dict]) -> None:
         {
             "c": case_id,
             "t": json.dumps(transcript),
-            "o": json.dumps(verdict := transcript[-1].get("verdict", {}) if transcript else {}),
+            "o": json.dumps(transcript[-1].get("verdict", {}) if transcript else {}),
         },
     )
 

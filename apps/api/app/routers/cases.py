@@ -103,7 +103,6 @@ async def simulate_sse(case_id: str, db: AsyncSession = Depends(get_db)):
 
     async def event_source() -> AsyncGenerator[str, None]:
         queue: asyncio.Queue = asyncio.Queue()
-        done_evt = {"event": "done", "payload": {}}
 
         async def hook(payload: dict) -> None:
             await queue.put({"event": "turn", "payload": payload})

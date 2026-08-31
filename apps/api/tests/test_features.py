@@ -7,7 +7,6 @@ from app.documents.generator import citation_gate_status, render_document
 from app.documents.registry import require_allowed_doc_type
 from datetime import date
 from fastapi import HTTPException
-import pytest
 
 
 # ---------- G3: registry hard block ----------

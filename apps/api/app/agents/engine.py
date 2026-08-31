@@ -17,15 +17,14 @@ Nondeterminism contract (TEST_PLAN): tests never assert on prose — only struct
 
 from __future__ import annotations
 
-import json
 from collections.abc import Awaitable, Callable
 
 from sqlalchemy import text
 
 from app.agents.debate_state_machine import DebateState, Turn
-from app.agents.prompts import NOT_LEGAL_ADVICE, SYSTEM_PROMPTS, verdict_from_text
+from app.agents.prompts import SYSTEM_PROMPTS, verdict_from_text
 from app.audit import write_audit_row
-from app.llm.base import LLMProvider, LLMRequest
+from app.llm.base import LLMRequest
 from app.llm.presets import options_for, seed_for
 
 TurnHook = Callable[[dict], Awaitable[None]]

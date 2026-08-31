@@ -21,7 +21,7 @@ from app.citations import verify_citations
 from app.db import get_db
 from app.deadlines import compute_deadline
 from app.deadlines.service import disclaimer
-from app.documents.generator import render_document, DISCLOSURE_FOOTER
+from app.documents.generator import render_document
 from app.documents.registry import require_allowed_doc_type
 
 router = APIRouter()
@@ -107,7 +107,7 @@ async def attest_document(doc_id: str, body: AttestBody, db: AsyncSession = Depe
             status_code=409,
             detail=f"{len(unverified)} citation(s) unverified — verify before attesting (SC Gen 23 para 17)",
         )
-    r = await db.execute(
+    await db.execute(
         text("UPDATE generated_documents SET user_reviewed=true WHERE id=:id RETURNING id"),
         {"id": doc_id},
     )
@@ -137,7 +137,7 @@ async def export_document(doc_id: str, db: AsyncSession = Depends(get_db)) -> di
     )).scalar_one_or_none()
     if att is None or att is not True:
         raise HTTPException(status_code=403, detail="export blocked: simulation attestation missing (SC Gen 23)")
-    r = await db.execute(
+    await db.execute(
         text("UPDATE generated_documents SET exported=true, export_blocked_reason=NULL WHERE id=:id RETURNING id"),
         {"id": doc_id},
     )

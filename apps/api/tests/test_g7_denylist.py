@@ -49,7 +49,6 @@ async def test_g7_denylist_tripwire_fires_on_injected_host() -> None:
 async def test_g7_denylist_tripwire_nsw_caselaw(monkeypatch) -> None:
     """Same tripwire on the caselaw path — simulate the ban by pointing the module
     constant at an austlii-domain URL via the deny-list check (never real HTTP)."""
-    import app.citations.service as svc
 
     async def _no_http(*a, **kw):
         raise AssertionError("outbound HTTP attempted after tripwire")
