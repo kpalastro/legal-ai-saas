@@ -22,3 +22,8 @@ bots/
 .next/
 node_modules/
 *.log
+
+# docker / local state
+infra/.env
+infra/postgres-data/
+*.pid
