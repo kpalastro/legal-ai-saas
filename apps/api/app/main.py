@@ -46,6 +46,12 @@ app.add_middleware(
 
 app.include_router(cases_router)
 
+# Feature 4/5/6 routers: documents + citations verification, deadline calculator,
+# billing scaffold (Stripe test-mode). All inherit fail-closed JWT auth via get_db.
+from app.routers.features import router as features_router  # noqa: E402
+
+app.include_router(features_router)
+
 
 @app.get("/healthz")
 async def healthz() -> dict[str, str]:
