@@ -21,6 +21,7 @@ bots/
 # Next.js build/cache outputs — never versioned (302 tracked .next files polluting status)
 .next/
 node_modules/
+apps/web/node_modules
 *.log
 
 # docker / local state

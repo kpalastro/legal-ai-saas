@@ -99,3 +99,61 @@ surface by reading the code + live regex/behavior probes:
 list test. Hand-off suggestion: @testing add `test_g7_denylist_tripwire` (assert `_denylisted()` raises, assert
 check_frl/check_nsw_caselaw reject injected austlii URLs) and a mocked-client test that offline sources still
 yield UNVERIFIED, never VERIFIED. Everything else in the feature-complete claim is independently verified.
+
+## Addendum — examples-content citation audit (31 Aug late)
+
+Swept all four example folders with the same medium-neutral/act regexes the production verifier uses:
+
+- **Disclosure footers: present** on every chronology + correspondence (9 matches); `not_legal_advice: true` in
+  every MANIFEST + verdict note; zero `austlii` tokens anywhere in the content. Good.
+- **One hallucination-style citation found in shipped example content:**
+  `civil_negligence_compensation/02_written_submissions.txt` line 48 cites
+  **"Adeels Palace v Moubarak [2014] NSW 687"** — that's not a real citation. The real chain is
+  *Adeels Palace Pty Ltd v Moubarak* [2009] NSWCA 7, affirmed [2010] HCA 31; `[2014] NSW 687` fails the
+  medium-neutral court-prefix check entirely ("NSW" alone isn't a court code, and the year/case number don't
+  resolve). Textbook exactly-the-risk SC Gen 23 para 17 exists for.
+- One borderline-malformed ref in `criminal_assault/02_written_submissions.txt`:
+  "*RPS v R* [2019] NSWCA" — missing the case number (and RPS v R is [2000] HCA 3; a 2019 NSWCA ref is suspect).
+- **Irony noted for the demo:** the negligence case (the one carrying the hallucinated cite) is *the* showcase for
+  the verification pipeline — the production `verify_citations()` would mark `[2014] NSW 687` as
+  **UNVERIFIED** (well-formed-enough to extract, but NSW Caselaw has no such match), exactly the behavior we want
+  users to see. The examples were generated through the pipeline but bypassed the citation-verification step
+  (no `CITATION VERIFICATION RECORD` block in the submissions), so the hallucinated cite shipped unflagged.
+
+**Required fix (small, either owner):** re-run the two affected submissions through `verify_citations()` and
+either attach the citation-status block (showing ❌/⚠️) or correct the citations to the real
+[2009] NSWCA 7 / [2010] HCA 31 + [2000] HCA 3 forms — OR add a line to `requirement/examples/README.md`
+acknowledging these are deliberate hallucination exhibits (honest, but must be labelled as such — currently the
+README claims they "surface uncertainty rather than invent case names", which line 48 of the negligence file
+contradicts). For a demo that leans on "we dodge hallucinated citations", shipping an unflagged invented cite in
+the showcase material undercuts the pitch.
+
+**RESOLVED (coderbot took option (a)) — accepted 31 Aug.** Sidecar `.citations.json` files committed next to both
+submissions, generated via the production `verify_citations()` path. I reproduced all three claims independently
+through the same production code (offline run): `[2014] NSW 687` → `unverified` ✓; truncated `[2019] NSWCA` not
+extracted at all ✓ (gap confirmed — regex needs the trailing number; one-line fix for the verifier follow-up);
+nothing claims `verified` offline ✓.
+
+**RESOLUTION UPGRADED — supervisor's verifier refinements (9ec2994) accepted 31 Aug.** Both backlog notes landed,
+plus one beyond the ask that I independently verified live through the production path (62/62 my re-run):
+truncated `[2019] NSWCA` now extracted → `flagged` ✓; fabricated-court `[2014] NSW 687` upgraded to `flagged`
+via the 24-form court allowlist (more truthful than unverified for an invalid form — pre-HTTP, correct) ✓;
+deny tokens (`[2024] AUSTLII 1`, `austlii.edu.au`) no longer extracted at all — deny-at-extraction becomes the
+prevention layer, tripwires become containment, and coderbot's template-collision test guards the invariant in
+the same CI run ✓; known courts unharmed (`[2024] NSWSC 1101` extracts normally) ✓. Regenerated showcase
+sidecars confirm: negligence shows `[2014] NSW 687 → flagged` + honest unverified Act rows; criminal shows
+`[2019] NSWCA → flagged`. The showcase now exhibits all three citation statuses the product defines, including a
+real hallucination flagged by the product's own verifier — the strongest possible G7 narrative for the demo.
+Two-layer design (deny-at-extraction = prevention, check_frl/check_nsw_caselaw tripwires = containment) is the
+final accepted architecture; any refactor that re-emits deny tokens fails coderbot's test in the same run.
+
+## Audit status summary (as of 31 Aug EOD)
+
+All security findings from 30–31 Aug rounds are closed or tracked with owners: F1–F5 (audit_content immutability,
+DSN pinning, superuser-RLS bypass, compliance marker, engine-init ordering) landed and are test-enforced; G7
+deny-list coverage landed (6 tests); TokenScrubFilter approved (covers all uvicorn record shapes); examples
+citation audit resolved with the honesty exhibit. Remaining outstanding items, all Phase 2 with named owners in
+PENDING.md: FORCE RLS + lexsim_app grant tightening, JWT secret rotation, ?token= → header-safe SSE (or
+log-filter dependency removed), least-privilege DB role for prod connections, uvicorn access-log hardening (now
+done via TokenScrubFilter — pending only the `?token=` removal itself), CI drift-check self-hosted runner, and
+the Bedrock Sydney swap for production.
