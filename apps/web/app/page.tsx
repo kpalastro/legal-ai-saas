@@ -412,7 +412,11 @@ export default function Home() {
 
                   </div>
 
-                  <div className="mt-1 whitespace-pre-wrap text-sm">{t.content}</div>
+                  <div className="mt-1 whitespace-pre-wrap text-sm">
+                    {t.verdict && "lower" in t.verdict
+                      ? "Judge's final verdict is summarized below." // turn-9 content is the raw verdict JSON — the band below renders it properly (compliance: no raw JSON on screen)
+                      : t.content}
+                  </div>
 
                   {t.verdict && (
 
