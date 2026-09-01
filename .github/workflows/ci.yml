@@ -37,6 +37,11 @@ jobs:
       # Gates G6/G3/C6 now; G1/G2/G5 (DB/RLS) + G7 (AustLII deny-list) wire up in next PRs.
       - run: uv run pytest --cov=app --cov-fail-under=80
         working-directory: apps/api
+        env:
+          # CI service postgres is :5432 (dev compose uses :5434); conftest defaults
+          # to the dev port so local runs work out of the box
+          LEXSIM_TEST_DATABASE_URL: postgresql+asyncpg://postgres:postgres@localhost:5432/lexsim
+          DATABASE_URL: postgresql+asyncpg://postgres:postgres@localhost:5432/lexsim
       # G8 stub: assert no cross-region Bedrock model IDs anywhere in the repo
       - name: G8 — no cross-region inference routing (APP 8)
         run: |
