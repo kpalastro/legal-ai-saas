@@ -44,33 +44,16 @@ def test_query_token_is_documented_legacy() -> None:
 def test_openapi_token_param_is_query_optional_not_required() -> None:
     """`token` must remain OPTIONAL on the SSE route — hard-requiring it would
     break header-auth clients; removing it breaks legacy clients without the
-    planned one-release notice."""
-    import sys
-
-    sys.path.insert(0, str(DB_PY.parents[1]))
-    from fastapi.routing import APIRoute
-
+    planned one-release notice. Asserted against the OpenAPI schema (the wire
+    contract) because FastAPI 0.11x builds query params at include-time, so the
+    bare APIRoute.dependant is empty (verified 31 Aug)."""
     from app.main import app
 
-    def iter_api_routes():
-        stack = list(app.router.routes)
-        while stack:
-            r = stack.pop()
-            if isinstance(r, APIRoute):
-                yield r
-            sub = getattr(r, "routes", None)
-
-            if sub:  # _IncludedRouter / sub-routers
-                stack.extend(sub)
-
-    sse = [r for r in iter_api_routes() if r.path.endswith("/simulate")]
-    assert sse, "SSE route vanished from the router — this test must be updated"
-    sse = sse[0]
-    token_param = next(
-        (p for p in sse.dependant.query_params if p.name == "token"), None
-    )
-    assert token_param is not None, (
-        "?token= legacy path removed — update this test + PENDING.md (removal is "
-        "the planned Phase-2 close, not an accident)"
-    )
-    assert token_param.default is None, "token query param must stay optional"
+    spec = app.openapi()
+    sse = spec["paths"]["/cases/{case_id}/simulate"]["get"]
+    params = {p["name"]: p for p in sse["parameters"]}
+    assert "token" in params, "?token= legacy path removed — update this test + PENDING.md (removal is the planned Phase-2 close, not an accident)"
+    assert params["token"]["in"] == "query"
+    assert params["token"]["required"] is False
+    # header auth remains available on the same route
+    assert "Authorization" in params and params["Authorization"]["in"] == "header"
