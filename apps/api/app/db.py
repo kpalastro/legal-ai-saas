@@ -63,13 +63,12 @@ async def get_db(
     identical decode path (same HMAC signature check, no looser SSE rules), and the
     token value is never logged — it is consumed here and discarded.
 
-    COMPLIANCE NOTE (RFC 6750 §2.3 / RFC 9700 §4.3.2): tokens in URI query strings
-    are discouraged (browser history, proxy/access/uvicorn access logs). This is a
-    v1-local-only accommodation because EventSource cannot set headers; production
-    alternatives, in order: native SSE via fetch()-ReadableStream (headers allowed),
-    or a short-lived one-time stream ticket minted by an authenticated POST and
-    exchanged as ?ticket=. Both are Phase-2 items under security's ?token= flag —
-    do not carry this fallback into prod.
+    COMPLIANCE NOTE (RFC 6750 §2.3 / RFC 9700 §4.3.2, updated): LEGACY — the FE now
+    uses fetch+ReadableStream with the Authorization header (Phase-2 item ③, done);
+    this fallback is kept for exactly one release window and must NOT reach prod
+    (tokens in URLs leak to browser history, proxies, access logs; TokenScrubFilter
+    is the interim mitigation, not the fix). Removal is tracked by
+    tests/test_sse_auth_surface.py::test_openapi_token_param_is_query_optional_not_required.
     """
     raw = None
     if authorization and authorization.startswith("Bearer "):

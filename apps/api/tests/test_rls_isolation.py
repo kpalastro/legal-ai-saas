@@ -236,3 +236,15 @@ class TestG1TenantIsolation:
             return rows.scalar()
 
         assert await _as(engine, None, anon_count) == 0, "fail-closed: unset claims must see zero rows"
+
+@pytest.mark.compliance
+async def test_force_rls_owner_cannot_bypass(engine) -> None:
+    """Migration 0002: even the table owner (postgres) is subject to RLS policies
+    (Phase-2 pre-prod control). All seven tenant tables must carry FORCE RLS."""
+    async with engine.begin() as conn:
+        force = await conn.scalar(text(
+            "select count(*) from pg_class where relname in "
+            "('cases','documents','simulations','generated_documents','deadlines','audit_log','audit_content') "
+            "and relforcerowsecurity"
+        ))
+    assert force == 7, "all seven tenant tables must carry FORCE ROW LEVEL SECURITY"
