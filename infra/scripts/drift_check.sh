@@ -28,7 +28,8 @@ tree_hash() {
   # OS junk and the Dockerfile itself (image may legitimately differ there).
   find . \( -name "__pycache__" -o -name ".venv" -o -name "uv.lock" -o \
             -name ".pytest_cache" -o -name "*.egg-info" -o -name ".DS_Store" -o \
-            -name "Dockerfile" -o -name "tests" -o -name "scripts" \) -prune -o -type f -print0 \
+            -name "Dockerfile" -o -name "tests" -o -name "scripts" -o \
+            -name ".mypy_cache" -o -name "*.tsbuildinfo" \) -prune -o -type f -print0 \
     | LC_ALL=C sort -z | xargs -0 sha256sum 2>/dev/null | awk '{print $1}' | sha256sum | cut -d" " -f1
 }
 
