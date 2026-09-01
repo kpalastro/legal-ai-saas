@@ -52,7 +52,45 @@ def main() -> None:
 
         conn = await asyncpg.connect(DSN, timeout=15)
         try:
-            await conn.execute(STUB.read_text())
+            # asyncpg forbids multi-command prepared statements; the stub SQL
+            # itself splits multi-statement blocks (same approach as
+            # apps/api/scripts/run_migrations.py).
+            import re
+
+            def split_sql(sql: str) -> list[str]:
+                parts, buf, i, n = [], [], 0, len(sql)
+                while i < n:
+                    if sql.startswith("$$", i):
+                        end = sql.find("$$", i + 2)
+                        end = n if end == -1 else end + 2
+                        buf.append(sql[i:end])
+                        i = end
+                        continue
+                    buf.append(sql[i])
+                    if sql[i] == "'":
+                        i += 1
+                        while i < n:
+                            buf.append(sql[i])
+                            if sql.startswith("''", i):
+                                buf.append("'")
+                                i += 2
+                                continue
+                            if sql[i] == "'":
+                                i += 1
+                                break
+                            continue
+                        continue
+                    if sql[i] == ";":
+                        parts.append("".join(buf).strip())
+                        buf = []
+                    i += 1
+                tail = "".join(buf).strip()
+                if tail:
+                    parts.append(tail)
+                return [p for p in parts if p]
+
+            for stmt in split_sql(STUB.read_text()):
+                await conn.execute(stmt)
             present = await conn.fetchval(
                 "SELECT 1 FROM information_schema.tables"
                 " WHERE table_schema='auth' AND table_name='users'"

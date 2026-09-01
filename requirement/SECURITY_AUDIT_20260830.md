@@ -157,3 +157,18 @@ PENDING.md: FORCE RLS + lexsim_app grant tightening, JWT secret rotation, ?token
 log-filter dependency removed), least-privilege DB role for prod connections, uvicorn access-log hardening (now
 done via TokenScrubFilter — pending only the `?token=` removal itself), CI drift-check self-hosted runner, and
 the Bedrock Sydney swap for production.
+
+## 1 Sep addendum — FORCE RLS accepted (Phase-2 ① closed)
+
+Supervisor's `0002_force_rls.sql` verified independently: all 7 tenant tables now `relforcerowsecurity = t`
+(psql probe), suite 66/66 on my re-run including the new `test_force_rls_owner_cannot_bypass` regression
+assertion, and the live behaviour probe confirms the change is real, not cosmetic: **as superuser `postgres`
+with A's claims set, `SELECT count(*) FROM cases` returns 0** (pre-FORCE it returned everything — this is the
+exact probe that found the original bypass); the same connection sees 2 rows unfiltered only because the probe
+reset claims. App paths still work under FORCE (supervisor's fresh-signup 201/list/deadline run). Two residual
+notes, both minor: (1) migrations now need the `session_replication_role` escape hatch for any future
+tenant-table maintenance — the migration header documents this, keep it that way; (2) FORCE RLS closes the
+*owner* bypass but the defense-in-depth ask (least-privilege non-superuser role for app connections, lexsim_app
+REVOKE tightening ⑦) still stands — FORCE means a superuser connection now obeys policies, but a genuine
+superuser credential is still the keys to the kingdom, so rotation hygiene (②) and grant scoping remain the
+complementary halves. Next in my queue: ③ header-safe SSE per SECURITY_PHASE2_PLAN.md.
