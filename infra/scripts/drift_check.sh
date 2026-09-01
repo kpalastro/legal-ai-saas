@@ -13,6 +13,9 @@ set -euo pipefail
 cd "$(git rev-parse --show-toplevel)"
 
 CONTAINER="${DRIFT_CONTAINER:-infra-api-1}"
+# DRIFT_TREE: override the local tree root (CI runner: point at the checked-out
+# apps/api from the job's own clone instead of the live deploy checkout).
+DRIFT_TREE="${DRIFT_TREE:-}"
 
 if ! docker ps --format '{{.Names}}' | grep -qx "$CONTAINER"; then
   echo "drift-check: $CONTAINER not running — nothing to compare (ok)"
@@ -30,7 +33,7 @@ tree_hash() {
 }
 
 REMOTE_HASH=$(docker exec "$CONTAINER" /bin/sh -c "cd /srv && ls pyproject.toml >/dev/null && $(declare -f tree_hash) && tree_hash" 2>/dev/null || echo "unreadable")
-LOCAL_TREE=$(cd apps/api && tree_hash)
+LOCAL_TREE=$(cd "${DRIFT_TREE:-apps/api}" && tree_hash)
 
 echo "local working tree : ${LOCAL_TREE:0:12}"
 echo "container /srv/app : ${REMOTE_HASH:0:12}"

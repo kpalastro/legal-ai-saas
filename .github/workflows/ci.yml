@@ -52,6 +52,6 @@ jobs:
       - name: Drift check — container vs working tree
         # Runner checkout is a different clone: compare container against
         # apps/api *from the checked-out ref* by re-pointing the script's cd.
-        run: |
-          git -C "$GITHUB_WORKSPACE" rev-parse --show-toplevel
-          infra/scripts/drift_check.sh
+        env:
+          DRIFT_TREE: ${{ github.workspace }}/apps/api
+        run: infra/scripts/drift_check.sh
