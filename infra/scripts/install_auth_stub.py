@@ -33,6 +33,10 @@ END
 $do$;
 GRANT USAGE ON SCHEMA public TO lexsim_app;
 GRANT USAGE ON SCHEMA auth TO lexsim_app;  -- auth.uid() runs under the app role
+GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO lexsim_app;
+GRANT SELECT ON auth.users TO lexsim_app;
+GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO lexsim_app;
+ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO lexsim_app;
 """
 
 DSN = "postgresql://postgres:postgres@localhost:5432/lexsim"
