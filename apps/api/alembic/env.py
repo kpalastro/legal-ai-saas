@@ -11,7 +11,6 @@ import asyncio
 from logging.config import fileConfig
 
 from alembic import context
-from sqlalchemy import event
 from sqlalchemy.ext.asyncio import create_async_engine
 
 from app.config import get_settings
@@ -88,7 +87,6 @@ def run_migrations_online() -> None:
 
 
 def _migrate_on_sync_conn(sync_conn) -> None:
-    from sqlalchemy.engine.default import DefaultDialect
 
     dialect = sync_conn.dialect
     original = dialect.do_execute
