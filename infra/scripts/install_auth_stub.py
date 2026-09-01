@@ -6,11 +6,13 @@ GitHub Actions service containers don't mount repo files — migration 0001 then
 fails with `schema "auth" does not exist` (it references auth.users + auth.uid()).
 This script applies the stub idempotently, exactly like the init mount would.
 
-Runs with the system python3 (the `uv run` venv used by later steps has asyncpg
-already; this step runs before setup-uv, so it makes its own arrangements):
- - asyncpg importable -> use it directly
- - else pip install into the interpreter, then re-exec this whole script in a
-   fresh interpreter (defensive against sys.path cache staleness)
+Two paths, chosen automatically:
+  1. asyncpg importable on the host -> connect directly to localhost:5432
+  2. else (runner host lacks asyncpg / pip egress restricted) -> pipe the stub
+     through `psql` inside the postgres:17-alpine service container via docker exec
+
+Splitting multi-statement SQL on semicolons (asyncpg prepared-statement limit) is
+handled by split_sql(), mirroring apps/api/scripts/run_migrations.py.
 """
 
 from __future__ import annotations
@@ -24,84 +26,87 @@ DSN = "postgresql://postgres:postgres@localhost:5432/lexsim"
 STUB = pathlib.Path(__file__).parent.parent / "postgres-init" / "01-auth-stub.sql"
 
 
-def asyncpg_available() -> bool:
+def split_sql(sql: str) -> list[str]:
+    parts, buf, i, n = [], [], 0, len(sql)
+    while i < n:
+        if sql.startswith("$$", i):
+            end = sql.find("$$", i + 2)
+            end = n if end == -1 else end + 2
+            buf.append(sql[i:end])
+            i = end
+            continue
+        buf.append(sql[i])
+        if sql[i] == "'":
+            i += 1
+            while i < n:
+                buf.append(sql[i])
+                if sql.startswith("''", i):
+                    buf.append("'")
+                    i += 2
+                    continue
+                if sql[i] == "'":
+                    i += 1
+                    break
+                i += 1
+            continue
+        if sql[i] == ";":
+            parts.append("".join(buf).strip())
+            buf = []
+        i += 1
+    tail = "".join(buf).strip()
+    if tail:
+        parts.append(tail)
+    return [p for p in parts if p]
+
+
+def _find_pg_container() -> str:
+    out = subprocess.run(
+        ["docker", "ps", "--filter", "ancestor=postgres:17-alpine", "--format", "{{.Names}}"],
+        capture_output=True, text=True, check=True, timeout=15,
+    ).stdout.split()
+    if not out:
+        raise RuntimeError("no postgres:17-alpine container running for stub install")
+    return out[0]
+
+
+def apply_via_docker() -> None:
+    subprocess.run(
+        [
+            "docker", "exec", "-i", _find_pg_container(),
+            "psql", "-U", "postgres", "-d", "lexsim", "-v", "ON_ERROR_STOP=1",
+        ],
+        input=STUB.read_text(), text=True, check=True, timeout=60,
+    )
+    print("auth stub: OK via docker psql")
+
+
+async def apply_via_asyncpg() -> None:
+    import asyncpg
+
+    conn = await asyncpg.connect(DSN, timeout=15)
     try:
-        import asyncpg  # noqa: F401
-        return True
-    except ImportError:
-        return False
+        for stmt in split_sql(STUB.read_text()):
+            await conn.execute(stmt)
+        present = await conn.fetchval(
+            "SELECT 1 FROM information_schema.tables"
+            " WHERE table_schema='auth' AND table_name='users'"
+        )
+        if not present:
+            raise RuntimeError("auth.users missing after stub apply")
+        print("auth stub: OK (schema auth, auth.users, auth.uid() present)")
+    finally:
+        await conn.close()
 
 
 def main() -> None:
-    if not asyncpg_available() and not pathlib.Path(sys.executable).name.startswith("python"):
-        pass  # still try pip below; some runners ship venvs without it
     try:
         import asyncpg  # noqa: F401
     except ImportError:
-        subprocess.run(
-            [sys.executable, "-m", "pip", "install", "--quiet", "asyncpg"], check=True
-        )
-        # asyncpg landed mid-interpreter; simplest safe path is a fresh process
-        subprocess.run([sys.executable, __file__], check=True)
-        raise SystemExit(0)
-
-    import asyncio  # noqa: PLC0415 — after guaranteed availability
-
-    async def _apply() -> None:
-        import asyncpg
-
-        conn = await asyncpg.connect(DSN, timeout=15)
-        try:
-            # asyncpg forbids multi-command prepared statements; the stub SQL
-            # itself splits multi-statement blocks (same approach as
-            # apps/api/scripts/run_migrations.py).
-            import re
-
-            def split_sql(sql: str) -> list[str]:
-                parts, buf, i, n = [], [], 0, len(sql)
-                while i < n:
-                    if sql.startswith("$$", i):
-                        end = sql.find("$$", i + 2)
-                        end = n if end == -1 else end + 2
-                        buf.append(sql[i:end])
-                        i = end
-                        continue
-                    buf.append(sql[i])
-                    if sql[i] == "'":
-                        i += 1
-                        while i < n:
-                            buf.append(sql[i])
-                            if sql.startswith("''", i):
-                                buf.append("'")
-                                i += 2
-                                continue
-                            if sql[i] == "'":
-                                i += 1
-                                break
-                            continue
-                        continue
-                    if sql[i] == ";":
-                        parts.append("".join(buf).strip())
-                        buf = []
-                    i += 1
-                tail = "".join(buf).strip()
-                if tail:
-                    parts.append(tail)
-                return [p for p in parts if p]
-
-            for stmt in split_sql(STUB.read_text()):
-                await conn.execute(stmt)
-            present = await conn.fetchval(
-                "SELECT 1 FROM information_schema.tables"
-                " WHERE table_schema='auth' AND table_name='users'"
-            )
-            if not present:
-                raise RuntimeError("auth.users missing after stub apply")
-            print("auth stub: OK (schema auth, auth.users, auth.uid() present)")
-        finally:
-            await conn.close()
-
-    asyncio.run(_apply())
+        # Host pip may hang behind restricted runner egress; docker is guaranteed
+        # because this job just started the postgres service container.
+        apply_via_docker()
+        return
+    asyncio.run(apply_via_asyncpg())
 
 
 if __name__ == "__main__":
