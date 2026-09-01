@@ -32,6 +32,7 @@ BEGIN
 END
 $do$;
 GRANT USAGE ON SCHEMA public TO lexsim_app;
+GRANT USAGE ON SCHEMA auth TO lexsim_app;  -- auth.uid() runs under the app role
 """
 
 DSN = "postgresql://postgres:postgres@localhost:5432/lexsim"
