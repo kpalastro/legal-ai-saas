@@ -22,6 +22,18 @@ import pathlib
 import subprocess
 import sys
 
+# Migration 0001 creates policies FOR lexsim_app; the role must pre-exist.
+ROLE_SQL = """
+DO $do$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'lexsim_app') THEN
+    CREATE ROLE lexsim_app NOLOGIN;
+  END IF;
+END
+$do$;
+GRANT USAGE ON SCHEMA public TO lexsim_app;
+"""
+
 DSN = "postgresql://postgres:postgres@localhost:5432/lexsim"
 STUB = pathlib.Path(__file__).parent.parent / "postgres-init" / "01-auth-stub.sql"
 
@@ -75,7 +87,7 @@ def apply_via_docker() -> None:
             "docker", "exec", "-i", _find_pg_container(),
             "psql", "-U", "postgres", "-d", "lexsim", "-v", "ON_ERROR_STOP=1",
         ],
-        input=STUB.read_text(), text=True, check=True, timeout=60,
+        input=STUB.read_text() + ROLE_SQL, text=True, check=True, timeout=60,
     )
     print("auth stub: OK via docker psql")
 
@@ -85,7 +97,7 @@ async def apply_via_asyncpg() -> None:
 
     conn = await asyncpg.connect(DSN, timeout=15)
     try:
-        for stmt in split_sql(STUB.read_text()):
+        for stmt in split_sql(STUB.read_text() + ROLE_SQL):
             await conn.execute(stmt)
         present = await conn.fetchval(
             "SELECT 1 FROM information_schema.tables"

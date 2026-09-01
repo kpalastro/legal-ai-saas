@@ -40,3 +40,14 @@ BEGIN
   RETURN NULLIF(single, '')::text;
 END;
 $$;
+
+-- 02b (appended by deploy): app role — migration 0001 issues policies FOR lexsim_app,
+-- so the role must exist before alembic runs. NOLOGIN (app connects as postgres in
+-- dev; prod uses a dedicated connection role via Supabase).
+DO $do$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'lexsim_app') THEN
+    CREATE ROLE lexsim_app NOLOGIN;
+  END IF;
+END
+$do$;
