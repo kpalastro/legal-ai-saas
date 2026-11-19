@@ -47,7 +47,7 @@ script for a fresh dev DB. CI applies the grants explicitly after migrations.
 ### Tests and checks (run from `apps/api`)
 
 ```bash
-uv run pytest -q                                     # 94 passed (4 CORS skip without a live API)
+uv run pytest -q                                     # 96 passed (4 CORS skip without a live API)
 uv run pytest -m compliance                          # SC Gen 23 / RLS / audit / deny-list gates
 uv run pytest tests/test_features.py::test_g3_prohibited_doc_types_rejected -q
 uv run ruff check .                                  # CI gate
@@ -64,7 +64,7 @@ connection bound to a previous test loop to the next test.
 ### Web
 
 ```bash
-cd apps/web && npm ci && npm run dev                 # Next.js 16.3.3 on :3000
+cd apps/web && npm ci && npm run dev                 # Next.js 16.4.6 on :3000
 cd apps/web && npx tsc --noEmit && npm run build     # CI web job
 cd apps/web && npm test                              # Vitest unit tests
 cd apps/web && npm run test:e2e                      # Playwright smoke (starts dev server)
@@ -88,7 +88,7 @@ Stale-container bugs have bitten this repo twice; rebuild with `docker compose -
 
 ```
 apps/api   FastAPI monolith + arq worker      (Python 3.13, SQLAlchemy async/asyncpg, Alembic)
-apps/web   Next.js 16.3.3 / React 19 demo     (:3000)
+apps/web   Next.js 16.4.6 / React 19 demo     (:3000)
 infra      docker-compose + postgres-init stub + drift/auth-stub scripts
 requirement/  design + compliance records; docs/ holds current architecture diagrams
 ```
@@ -229,7 +229,7 @@ Dev supplies an `auth` schema stub (`infra/postgres-init/01-auth-stub.sql`) with
 - **Test data must not leak into demos.** Use `[TEST]` names and purge fixtures before and after (TEST_PLAN §9; `test_audit_append_only.py` is the reference). Do not assert SQL errors where the doctrine requires asserting visibility-and-effect; always include the fail-closed zero-row case.
 - **Never assert on LLM prose.** Only structure: turn order, verdict schema `{lower, point, upper}`, citation status enums, footer presence, DB row shapes.
 - **Compliance tests are non-skippable on protected paths** (`documents/`, export, RLS, audit). If you touch those, run `uv run pytest -m compliance`.
-- **`apps/web` is Next.js 16.3.3 with breaking changes from older Next versions.** `apps/web/AGENTS.md` (imported by `apps/web/CLAUDE.md`) requires reading `node_modules/next/dist/docs/` before writing web code. Do not assume App Router conventions from training data.
+- **`apps/web` is Next.js 16.4.6 with breaking changes from older Next versions.** `apps/web/AGENTS.md` (imported by `apps/web/CLAUDE.md`) requires reading `node_modules/next/dist/docs/` before writing web code. Do not assume App Router conventions from training data.
 - **Provider swap is config-only:** `LLM_PROVIDER=bedrock` + pinned region/model must work without touching the debate engine. Keep changes behind `LLMProvider`.
 
 ## Documentation map

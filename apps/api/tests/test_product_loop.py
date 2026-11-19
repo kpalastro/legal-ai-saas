@@ -286,6 +286,14 @@ async def test_document_gate_attestation_and_export(api, user, case, monkeypatch
     assert doc["gates"]["simulation_attested"] is False
     assert doc["gates"]["citations_all_verified"] is True
 
+    snapshots = await api.get(
+        f"/cases/{case}/authority-snapshots", headers=user["headers"]
+    )
+    assert snapshots.status_code == 200
+    assert len(snapshots.json()) == 1
+    assert snapshots.json()[0]["status"] == "verified"
+    assert snapshots.json()[0]["content_sha256"]
+
     # Export is blocked until the simulation is attested.
     blocked = await api.get(
         f"/documents/{doc['id']}/export?format=txt", headers=user["headers"]

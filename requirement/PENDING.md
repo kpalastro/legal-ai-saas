@@ -5,7 +5,7 @@
 The full localhost loop is working: auth → intake → upload/extract → live
 9-turn grounded debate → simulation attestation → document generation →
 citation gate → DOCX/PDF export → deadlines/limitations → plans.
-Suite: 94 passed (4 CORS tests run only when the API is live), coverage ~82%.
+Suite: 96 passed (4 CORS tests run only when the API is live), coverage ~82%.
 
 ## Completed 2026-11-19 (product-loop completion round)
 
@@ -133,6 +133,33 @@ Suite: 94 passed (4 CORS tests run only when the API is live), coverage ~82%.
   cancellation and 0007 covered. Frontend: 3 Vitest unit tests and 2 Playwright
   smoke tests wired into CI.
 
+## Completed 2026-11-19 (phase 6 — evaluation and CI)
+
+- **Calibration harness.** `scripts/calibrate.py` computes range coverage,
+  interval width, Brier score and point MAE from an outcomes CSV; unit-tested.
+  `docs/EVALUATION.md` explains the dataset and expert-review requirement.
+- **Authenticated workspace E2E.** Playwright mocks the API/GoTrue surface and
+  verifies case listing, matter opening, court policy and elements rendering
+  without a backend.
+- **CI security job.** `infra/scripts/security_scan.sh` runs pip-audit, npm audit
+  (when node_modules exist) and a secret-pattern grep as a report-only job.
+- **Tests.** 96 backend, 3 Vitest, 3 Playwright; ~82% backend coverage.
+
+## Completed 2026-11-20 (phase 7 — provenance, security and drills)
+
+- **Authority snapshots.** `authority_snapshots` (migration 0008) stores the
+  source, URL, snippet, checked_at and hash for every verified citation;
+  `GET /cases/{id}/authority-snapshots` exposes the evidence; erasure deletes it.
+- **Full-stack E2E.** An opt-in Playwright journey (`E2E_FULL_STACK=1`) ran
+  against the real GoTrue/API/web stack: signup → intake → matter open.
+- **Restore drill.** Backed up the dev DB and restored it into a scratch
+  database (`infra/scripts/restore_drill.sh`): 17 public tables restored, scratch
+  DB dropped.
+- **Security gate.** Upgraded Next.js to 16.4.6 (0 npm advisories), kept
+  pip-audit clean, and made the CI `security` job blocking (pip-audit + npm audit
+  + secret-pattern grep).
+- **Tests.** 96 backend, 3 Vitest, 3 Playwright (+1 opt-in full-stack).
+
 ## Remaining — trust and legal accuracy
 
 - [ ] **RAG over authoritative sources.** Retrieval now works over the user's
@@ -143,74 +170,65 @@ Suite: 94 passed (4 CORS tests run only when the API is live), coverage ~82%.
   distinguished authorities, repealed/amended legislation and "as at" dates.
 - [ ] **Citation coverage.** Parallel/authorised-report citations, pinpoint
   paragraphs, delegated legislation, tribunal decisions, court-specific styles.
-- [ ] **Calibration/backtesting.** The verdict is a model-generated scenario
-  range with a methodology note. A production product needs base rates,
-  backtests against decided matters, and expert review; consider framing as
-  scenario analysis rather than probability.
+- [ ] **Calibration/backtesting data and methodology.** The verdict is a
+  model-generated scenario range; `scripts/calibrate.py` measures coverage,
+  interval width, Brier and MAE, but a representative settled-matter dataset,
+  expert grading, red-team tests and a published methodology are required before
+  any calibration claim.
 - [ ] **Claim-level grounding.** The citation-risk score is aggregate; individual
   factual/legal assertions are not tied to a source. Consider a claim-extraction
   + verification pass.
-- [ ] **Evaluation harness.** Gold cases, expert grading, regression tests for
-  legal quality, red-team/prompt-injection tests. The structural example script
-  is in place; legal-quality grading still needs expert review.
 - [ ] **Court policy data review.** The registry exists, but each entry
   (especially GPN-AI/FCFCOA and the generic fallback) must be checked against the
   current published version before launch.
-- [ ] **Analysis-quality review.** The weakness/claim/element analysis is
-  model-generated; validate its taxonomy against lawyer-reviewed fixtures.
+- [ ] **Analysis-quality review.** The weakness/claim/element/settlement analysis
+  is model-generated; validate its taxonomy against lawyer-reviewed fixtures.
 
 ## Remaining — professional platform
 
-- [ ] SSO/SAML/SCIM for enterprise tiers (orgs/RBAC and sharing are done).
-- [ ] Client portal, visual redlining, court forms, e-filing integrations.
-  (Versioning, unified diff, comments and typed-name signatures are done; a
-  signature is not legal execution and must be reviewed by counsel.)
-- [ ] Court forms, DOCX/PDF formatting per court, versioning/diff/redline,
-  e-signature, e-filing integrations.
+- [ ] Enterprise auth: SSO/SAML/SCIM (orgs/RBAC and sharing are done).
+- [ ] Client portal, visual redlining, court forms/per-court formatting,
+  e-filing, e-signature legal execution/validity.
 - [ ] Evidence-sufficiency and ADR/negotiation workflow beyond the model-generated
   settlement range/cost risks (element checklists are done).
-- [ ] Full WCAG audit, plain-language rewrite, translations and mobile-first
-  flows. (Skip link, focus rings, reduced-motion and ARIA status/current are in.)
-- [ ] Integrations: DMS, accounting, court portals (calendar export + email
-  reminders are done).
+- [ ] Full WCAG audit, plain-language rewrite, translations and mobile-first flows.
+- [ ] Integrations: DMS, accounting, court portals (calendar/email reminders done).
 
 ## Remaining — privacy, security, compliance
 
-- [ ] **GoTrue identity deletion in production.** The app calls the admin API
-  when `GOTRUE_ADMIN_URL`/`GOTRUE_SERVICE_ROLE_KEY` are configured; set them and
-  verify in prod. Otherwise `identity_deleted=false` and the console is required.
-- [ ] **SSO/MFA/refresh hardening.** Hosted Supabase Auth configuration, MFA
-  enrolment, refresh rotation, and httpOnly/BFF token storage.
+- [ ] **GoTrue identity deletion in production.** Configure
+  `GOTRUE_ADMIN_URL` + `GOTRUE_SERVICE_ROLE_KEY` and verify; otherwise erasure
+  reports `identity_deleted=false` and the console is required.
+- [ ] **MFA and token hardening.** GoTrue MFA enrolment, refresh-token
+  rotation/revocation, and httpOnly/BFF token storage (the browser currently
+  stores tokens in `localStorage`).
 - [ ] **Audit-content retention policy.** Append-only audit rows are retained
   (LPP/legal obligations); decide the `audit_content` window and document the
-  tension with APP 11/13 in the privacy policy.
-- [ ] Privacy policy, terms, collection notice, consent records, DPA,
-  cross-border data-flow register, breach workflow (stub in
-  `app/compliance/breach.py`).
-- [ ] MFA/password policy, refresh-token rotation/revocation, httpOnly/BFF
-  token storage (the browser currently stores tokens in `localStorage`).
+  APP 11/13 tension in the privacy policy.
+- [ ] Legal review and publication of the privacy policy, terms, collection
+  notice, DPA, cross-border data-flow register and breach runbook
+  (drafts/stubs exist; consent records are implemented).
+- [ ] Practising-certificate verification and a vulnerable-user escalation
+  workflow (referral resources and conflict checks are done).
+- [ ] SOC 2/ISO 27001, pen test, vulnerability disclosure, DR plan, Terraform,
+  container scanning (dependency scan, backups and restore drill are done).
+- [ ] Observability sink/SLOs: configure `SENTRY_DSN` (implemented, PII off) or
+  OpenTelemetry; `/metrics` is in-process only.
+- [ ] Real Stripe keys + live webhook; tax invoice/GST entity setup and dunning
+  (automatic tax, trials, cancellation and quotas are implemented).
 - [x] Dedicated least-privilege DB login role (`lexsim_api` in dev compose;
   confirm/rotate the managed role in prod). `?token=` removal is done.
-- [ ] Vulnerable-user escalation workflow (referral resources and conflict
-  checks are done), lawyer escalation, practising-certificate verification.
-- [ ] SOC 2/ISO 27001 readiness, pen test, vulnerability disclosure, backups/DR,
-  IaC (Terraform), container/dependency scanning.
-- [ ] Observability: configure `SENTRY_DSN` (implemented, PII off) or
-  OpenTelemetry; build SLOs/dashboards. `/metrics` is in-process only.
-- [ ] Real Stripe keys + live webhook test; tax invoice/GST entity setup and
-  dunning (automatic tax, optional trials, cancellation downgrade and
-  entitlements/quotas are implemented).
 
 ## Remaining — engineering hygiene
 
 - [x] Money-path per-file coverage floors (`scripts/check_money_path_coverage.py`)
   are enforced in CI; raise the thresholds as tests land.
-- [x] Frontend unit tests (Vitest) and Playwright browser smoke tests are wired
-  into the web CI job. Expand E2E coverage beyond the auth/notice flow.
-- [ ] Load/performance tests: `scripts/load_sse.py` exists but is not wired into
-  CI or run against a staging stack.
+- [x] Frontend unit tests (Vitest) and Playwright tests (auth, notice,
+  authenticated workspace mock, opt-in full-stack journey) are in the web CI job.
+- [ ] Wire the opt-in full-stack journey into staging CI; add load/performance
+  tests (`scripts/load_sse.py` exists).
 - [x] Migration backfill helper (`scripts/backfill_document_simulations.py`) for
   legacy documents with NULL `simulation_id`.
-- [x] Restore script and report-only dependency/secret scan
-  (`infra/scripts/restore_postgres.sh`, `infra/scripts/security_scan.sh`);
-  schedule a restore drill and make the scan blocking after triage.
+- [x] Restore script + drill (`restore_postgres.sh`, `restore_drill.sh`) and a
+  blocking dependency/secret scan (`security_scan.sh`, CI `security` job).
+  Schedule a recurring restore drill in the ops calendar.

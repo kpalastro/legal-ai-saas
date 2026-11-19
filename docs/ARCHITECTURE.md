@@ -16,7 +16,7 @@
 ```
                          ┌──────────────────────────────────────┐
                          │        Browser (Chrome/Safari)       │
-                         │  Next.js 16.3.3 · React 19 · SSE ES  │
+                         │  Next.js 16.4.6 · React 19 · SSE ES  │
                          └───────────┬──────────────────────────┘
                       :3000 (apps/web)│
                fetch+JWT │            │ fetch + ReadableStream (JWT header)

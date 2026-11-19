@@ -65,6 +65,9 @@ async def deidentify_case(conn, case_id: str) -> list[str]:
         text("DELETE FROM public.document_chunks WHERE case_id = :c"), {"c": case_id}
     )
     await conn.execute(
+        text("DELETE FROM public.authority_snapshots WHERE case_id = :c"), {"c": case_id}
+    )
+    await conn.execute(
         text("DELETE FROM public.deadlines WHERE case_id = :c"), {"c": case_id}
     )
     await conn.execute(

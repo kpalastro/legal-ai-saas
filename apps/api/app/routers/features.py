@@ -40,6 +40,7 @@ from app.billing import (
     verify_webhook,
 )
 from app.citations import CitationFinding, verify_citations
+from app.citations.snapshots import store_snapshots
 from app.config import get_settings
 from app.db import SessionFactory, get_db
 from app.deadlines import compute_deadline, compute_limitation
@@ -272,12 +273,14 @@ async def generate_document(
     await require_case_writer(db, body.case_id)
 
     cite_rows: list[dict] = []
+    findings = []
     if body.verify:
         text_blob = "\n".join(
             str(v) for v in body.fields.values() if isinstance(v, (str, list, dict))
         )
         findings = await verify_citations(text_blob)
         cite_rows = [_finding_dict(f) for f in findings]
+        await store_snapshots(db, body.case_id, findings)
     content = render_document(
         doc_type.value, body.jurisdiction, body.fields, citations=cite_rows
     )
@@ -376,7 +379,9 @@ async def revise_document(
         text_blob = "\n".join(
             str(v) for v in body.fields.values() if isinstance(v, (str, list, dict))
         )
-        cite_rows = [_finding_dict(f) for f in await verify_citations(text_blob)]
+        findings = await verify_citations(text_blob)
+        cite_rows = [_finding_dict(f) for f in findings]
+        await store_snapshots(db, str(old["case_id"]), findings)
     jurisdiction = body.jurisdiction or (
         await db.execute(
             text(
@@ -453,6 +458,32 @@ async def revise_document(
             "user_reviewed": False,
         },
     }
+
+
+@router.get("/cases/{case_id}/authority-snapshots")
+async def authority_snapshots(
+    case_id: str, db: AsyncSession = Depends(get_db)
+) -> list[dict]:
+    rows = (
+        await db.execute(
+            text(
+                "SELECT id, raw, status, source, url, evidence, checked_at,"
+                " content_sha256, created_at"
+                " FROM public.authority_snapshots WHERE case_id = :c"
+                " ORDER BY created_at DESC"
+            ),
+            {"c": case_id},
+        )
+    ).mappings().all()
+    return [
+        {
+            **dict(row),
+            "id": str(row["id"]),
+            "checked_at": row["checked_at"].isoformat() if row["checked_at"] else None,
+            "created_at": row["created_at"].isoformat() if row["created_at"] else None,
+        }
+        for row in rows
+    ]
 
 
 @router.get("/documents/{doc_id}/versions")

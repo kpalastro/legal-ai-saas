@@ -23,8 +23,8 @@ diff, settlement/cost analysis, conflict checks, support/referral resources,
 legal hold, data export/de-identification, metrics, and Stripe checkout/webhooks
 with subscription cancellation (test-mode when keys are configured).
 
-94 backend tests green (4 CORS tests run only when the API is live), plus 3
-Vitest unit tests and 2 Playwright browser smoke tests, including the seven
+96 backend tests green (4 CORS tests run only when the API is live), plus 3
+Vitest unit tests and 3 Playwright browser tests, including the seven
 compliance gates: RLS tenant isolation, export gate, banned-doc-type hard block,
 disclosure footer, audit trail, citation-source deny-list, and debate protocol
 order. Remaining Phase-2 work is tracked in
@@ -52,7 +52,7 @@ order. Remaining Phase-2 work is tracked in
 
 ```
 ┌────────────────────────────────────────────────────────────────────┐
-│  apps/web — Next.js 16.3.3 (React 19, Tailwind v4)  → :3000        │
+│  apps/web — Next.js 16.4.6 (React 19, Tailwind v4)  → :3000        │
 │    login · matters · intake · uploads · live SSE debate · docs     │
 └──────────────┬─────────────────────────────────────────────────────┘
                │ fetch (JWT header) + fetch ReadableStream (SSE)
@@ -112,7 +112,7 @@ after API edits: `docker compose -f infra/docker-compose.yml up -d --build api`.
 
 ```bash
 cd apps/api
-uv run pytest -q                                     # 94 passed (4 skip without a live API)
+uv run pytest -q                                     # 96 passed (4 skip without a live API)
 uv run pytest -m compliance                          # SC Gen 23 / RLS / audit / deny-list
 uv run pytest -q --cov=app --cov-fail-under=80       # CI gate
 uv run ruff check . && uv run mypy app               # CI gates

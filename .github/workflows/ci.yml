@@ -85,6 +85,26 @@ jobs:
       - run: npm run test:e2e
         working-directory: apps/web
 
+  security:
+    runs-on: ubuntu-latest
+    # Blocking: pip-audit and npm audit were clean on 2026-11-20. Re-triage and
+    # update the lockfiles rather than relaxing this gate.
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.13" }
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: apps/web/package-lock.json
+      - run: uv sync --group dev
+        working-directory: apps/api
+      - run: npm ci
+        working-directory: apps/web
+      - run: bash infra/scripts/security_scan.sh
+
   # Pending item #4: fail CI when a running api container serves code that diverges
   # from git HEAD (the stale-container gap that bit twice on 31 Aug).
   drift:
