@@ -66,6 +66,8 @@ connection bound to a previous test loop to the next test.
 ```bash
 cd apps/web && npm ci && npm run dev                 # Next.js 16.3.3 on :3000
 cd apps/web && npx tsc --noEmit && npm run build     # CI web job
+cd apps/web && npm test                              # Vitest unit tests
+cd apps/web && npm run test:e2e                      # Playwright smoke (starts dev server)
 ```
 
 The web app is one client component (`app/page.tsx`) with the full workspace:

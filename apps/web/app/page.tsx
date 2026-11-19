@@ -10,6 +10,8 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 
+import { lines, parties } from "@/lib/format";
+
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 const GOTRUE_URL = process.env.NEXT_PUBLIC_GOTRUE_URL ?? "http://localhost:9999";
 const TOKEN_KEY = "lexsim_token";
@@ -261,20 +263,6 @@ function downloadBlob(blob: Blob, filename: string) {
   anchor.download = filename;
   anchor.click();
   URL.revokeObjectURL(url);
-}
-
-function lines(value: string): string[] {
-  return value
-    .split("\n")
-    .map((line) => line.trim())
-    .filter(Boolean);
-}
-
-function parties(value: string): { name: string; role: string }[] {
-  return lines(value).map((line) => {
-    const [name, role] = line.split("—").map((part) => part.trim());
-    return { name: name ?? line, role: role ?? "party" };
-  });
 }
 
 async function errorText(response: Response): Promise<string> {
@@ -2242,8 +2230,21 @@ export default function Home() {
                         </p>
                       )}
                       {docDiff && (
-                        <pre className="mt-2 max-h-60 overflow-auto whitespace-pre-wrap rounded bg-neutral-950 p-3 text-xs text-neutral-300">
-                          {docDiff}
+                        <pre className="mt-2 max-h-60 overflow-auto whitespace-pre-wrap rounded bg-neutral-950 p-3 text-xs">
+                          {docDiff.split("\n").map((line, index) => (
+                            <span
+                              key={`${index}-${line}`}
+                              className={
+                                line.startsWith("+") && !line.startsWith("+++")
+                                  ? "block bg-emerald-950 text-emerald-300"
+                                  : line.startsWith("-") && !line.startsWith("---")
+                                    ? "block bg-red-950 text-red-300"
+                                    : "block text-neutral-400"
+                              }
+                            >
+                              {line || " "}
+                            </span>
+                          ))}
                         </pre>
                       )}
                       {docVersions.length > 1 && (

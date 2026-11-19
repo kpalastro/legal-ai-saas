@@ -127,9 +127,11 @@ Suite: 94 passed (4 CORS tests run only when the API is live), coverage ~82%.
   automatic tax/tax IDs and optional trials; `customer.subscription.deleted`
   downgrades to free.
 - **Accessibility/polish.** Skip link, focus-visible rings, reduced-motion CSS,
-  ARIA status/current attributes; HTML+text reminder emails.
-- **Tests.** 94 passed, ~82% coverage; comments/diff/settlement/cancellation and
-  the 0007 migration are covered.
+  ARIA status/current attributes; HTML+text reminder emails; visual diff
+  rendering.
+- **Tests.** 94 backend tests, ~82% coverage; comments/diff/settlement/
+  cancellation and 0007 covered. Frontend: 3 Vitest unit tests and 2 Playwright
+  smoke tests wired into CI.
 
 ## Remaining — trust and legal accuracy
 
@@ -203,8 +205,8 @@ Suite: 94 passed (4 CORS tests run only when the API is live), coverage ~82%.
 
 - [x] Money-path per-file coverage floors (`scripts/check_money_path_coverage.py`)
   are enforced in CI; raise the thresholds as tests land.
-- [ ] Frontend component tests and Playwright E2E (the web CI job only
-  type-checks and builds).
+- [x] Frontend unit tests (Vitest) and Playwright browser smoke tests are wired
+  into the web CI job. Expand E2E coverage beyond the auth/notice flow.
 - [ ] Load/performance tests: `scripts/load_sse.py` exists but is not wired into
   CI or run against a staging stack.
 - [x] Migration backfill helper (`scripts/backfill_document_simulations.py`) for

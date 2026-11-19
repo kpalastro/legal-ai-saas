@@ -73,9 +73,16 @@ jobs:
           cache-dependency-path: apps/web/package-lock.json
       - run: npm ci
         working-directory: apps/web
+      # Build first: Next generates .next/types, which next-env.d.ts imports.
+      - run: npm run build
+        working-directory: apps/web
       - run: npx tsc --noEmit
         working-directory: apps/web
-      - run: npm run build
+      - run: npm test
+        working-directory: apps/web
+      - run: npx playwright install --with-deps chromium
+        working-directory: apps/web
+      - run: npm run test:e2e
         working-directory: apps/web
 
   # Pending item #4: fail CI when a running api container serves code that diverges

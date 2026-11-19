@@ -23,7 +23,8 @@ diff, settlement/cost analysis, conflict checks, support/referral resources,
 legal hold, data export/de-identification, metrics, and Stripe checkout/webhooks
 with subscription cancellation (test-mode when keys are configured).
 
-94 tests green (4 CORS tests run only when the API is live), including the seven
+94 backend tests green (4 CORS tests run only when the API is live), plus 3
+Vitest unit tests and 2 Playwright browser smoke tests, including the seven
 compliance gates: RLS tenant isolation, export gate, banned-doc-type hard block,
 disclosure footer, audit trail, citation-source deny-list, and debate protocol
 order. Remaining Phase-2 work is tracked in
@@ -116,6 +117,7 @@ uv run pytest -m compliance                          # SC Gen 23 / RLS / audit /
 uv run pytest -q --cov=app --cov-fail-under=80       # CI gate
 uv run ruff check . && uv run mypy app               # CI gates
 cd ../web && npx tsc --noEmit && npm run build       # CI web job
+cd ../web && npm test && npm run test:e2e            # Vitest + Playwright smoke
 ```
 
 - **Tests never depend on a live LLM** — the engine uses stubbed providers in
