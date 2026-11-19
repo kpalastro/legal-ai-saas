@@ -21,6 +21,7 @@ dependencies = [
     "pyjwt>=2.9",
     "structlog>=24.4",
     "python-multipart>=0.0.34",
+    "sentry-sdk>=2.75.0",
 ]
 
 [dependency-groups]

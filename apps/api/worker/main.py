@@ -11,8 +11,12 @@ legal_hold (idempotent: each case matches once; a re-run archives 0).
 
 from __future__ import annotations
 
+import asyncio
 import json
+import logging
+import smtplib
 from datetime import UTC, datetime, timedelta
+from email.mime.text import MIMEText
 
 from arq import cron
 from arq.connections import RedisSettings
@@ -23,6 +27,9 @@ from app.agents.engine import run_debate
 from app.config import get_settings
 from app.db import SessionFactory, arm_request
 from app.llm import get_provider
+from app.privacy import delete_uploads, retention_deidentify
+
+logger = logging.getLogger(__name__)
 
 RETENTION_YEARS = 7  # C3 control (APP; legal-hold override honoured)
 
@@ -92,28 +99,94 @@ async def persist_result(conn, *, case_id: str, transcript: list[dict]) -> str:
 
 
 async def retention_sweep(ctx: dict) -> dict:
-    """C3 — idempotent archive sweep (hard erasure + Storage purge = next PR)."""
+    """C3 — de-identify every case past the 7-year window unless under legal hold.
+
+    Audit rows are intentionally retained (append-only, LPP/legal obligations);
+    case content, extracted text, chunks and raw uploads are removed.
+    """
     engine = create_async_engine(get_settings().database_url)
     cutoff = (datetime.now(UTC) - timedelta(days=365 * RETENTION_YEARS)).date()
+    try:
+        async with engine.begin() as conn:
+            count, paths = await retention_deidentify(conn, cutoff)
+        removed = delete_uploads(paths)
+        return {
+            "archived": count,
+            "erased": count,
+            "uploads_removed": removed,
+            "cutoff": cutoff.isoformat(),
+        }
+    finally:
+        await engine.dispose()
+
+
+def _send_email(to: str, subject: str, body: str) -> bool:
+    settings = get_settings()
+    message = MIMEText(body, "plain", "utf-8")
+    message["Subject"] = subject
+    message["From"] = settings.smtp_from
+    message["To"] = to
+    try:
+        with smtplib.SMTP(settings.smtp_host, settings.smtp_port, timeout=10) as smtp:
+            smtp.sendmail(settings.smtp_from, [to], message.as_string())
+        return True
+    except Exception:  # noqa: BLE001 — leave unsent so the next run retries
+        logger.exception("deadline reminder email failed for %s", to)
+        return False
+
+
+async def send_deadline_reminders(ctx: dict) -> dict:
+    """Daily: email deadlines due in the next 7 days, once (reminder_sent)."""
+    engine = create_async_engine(get_settings().database_url)
     try:
         async with engine.begin() as conn:
             rows = (
                 await conn.execute(
                     text(
-                        "UPDATE public.cases SET status='archived', updated_at=NOW()"
-                        " WHERE created_at < :cutoff AND legal_hold = FALSE"
-                        " AND status <> 'archived' RETURNING id"
-                    ),
-                    {"cutoff": cutoff},
+                        """
+                        SELECT d.id, d.due_date, d.trigger_doc_type, u.email
+                        FROM public.deadlines d
+                        JOIN public.cases c ON c.id = d.case_id
+                        JOIN public.users u ON u.id = c.user_id
+                        WHERE d.reminder_sent = FALSE
+                          AND u.erased_at IS NULL
+                          AND d.due_date BETWEEN CURRENT_DATE
+                                             AND CURRENT_DATE + INTERVAL '7 days'
+                        ORDER BY d.due_date
+                        """
+                    )
                 )
-            ).fetchall()
-            return {"archived": len(rows), "erased": 0, "cutoff": cutoff.isoformat()}
+            ).mappings().all()
+            sent = 0
+            for row in rows:
+                body = (
+                    f"LexSim reminder: {row['trigger_doc_type']} deadline is due "
+                    f"{row['due_date']}.\n\n"
+                    "This is preparation assistance only — verify the date against "
+                    "the court's rules before relying on it.\n"
+                )
+                if await asyncio.to_thread(
+                    _send_email, row["email"], f"LexSim deadline due {row['due_date']}", body
+                ):
+                    await conn.execute(
+                        text(
+                            "UPDATE public.deadlines"
+                            " SET reminder_sent = TRUE, reminder_sent_at = NOW()"
+                            " WHERE id = :id"
+                        ),
+                        {"id": str(row["id"])},
+                    )
+                    sent += 1
+            return {"due": len(rows), "sent": sent}
     finally:
         await engine.dispose()
 
 
 class WorkerSettings:
-    functions = [run_simulation, retention_sweep]
-    cron_jobs = [cron(retention_sweep, hour=2, minute=0)]
+    functions = [run_simulation, retention_sweep, send_deadline_reminders]
+    cron_jobs = [
+        cron(retention_sweep, hour=2, minute=0),
+        cron(send_deadline_reminders, hour=8, minute=0),
+    ]
     redis_settings = RedisSettings.from_dsn(get_settings().redis_url)
     max_tries = 3  # retry cap (idempotency guard, TEST_PLAN P1)

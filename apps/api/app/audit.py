@@ -14,7 +14,7 @@ from sqlalchemy import text
 async def write_audit_row(
     db: AsyncSession,
     *,
-    case_id: str,
+    case_id: str | None,
     user_id: str,
     event_type: str,
     model_id: str,
@@ -22,19 +22,25 @@ async def write_audit_row(
     response_text: str,
     prompt_sha: str | None = None,
     response_sha: str | None = None,
+    prompt_version: str | None = None,
+    model_digest: str | None = None,
 ) -> None:
-    """Write content + audit row atomically (CTE guarantees the pairing)."""
+    """Write content + audit row atomically (CTE guarantees the pairing).
+
+    case_id may be NULL for account-level events (e.g. erasure/export); the
+    audit INSERT policy only requires user_id = auth.uid().
+    """
     ref = f"inline:{prompt_sha or ''}:{response_sha or ''}"
     await db.execute(
         text(
             "WITH new_content AS ("
-            "  INSERT INTO audit_content (prompt_text, response_text)"
+            "  INSERT INTO public.audit_content (prompt_text, response_text)"
             "  VALUES (:p, :r) RETURNING id"
             ")"
-            " INSERT INTO audit_log (case_id, user_id, event_type, model_id,"
-            "   prompt_ref, response_ref, content_ref)"
+            " INSERT INTO public.audit_log (case_id, user_id, event_type, model_id,"
+            "   prompt_ref, response_ref, content_ref, prompt_version, model_digest)"
             " SELECT :case_id, :user_id, :event_type, :model_id, :prompt_ref,"
-            "   :response_ref, id FROM new_content"
+            "   :response_ref, id, :prompt_version, :model_digest FROM new_content"
         ),
         dict(
             p=prompt_text,
@@ -45,5 +51,7 @@ async def write_audit_row(
             model_id=model_id,
             prompt_ref=ref,
             response_ref=ref,
+            prompt_version=prompt_version,
+            model_digest=model_digest,
         ),
     )

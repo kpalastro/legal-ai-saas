@@ -89,7 +89,6 @@ async def arm_request(db, *, user_id: str) -> None:
 
 async def get_db(
     authorization: str | None = Header(default=None, alias="Authorization"),
-    token: str | None = None,  # SSE-only query-param fallback (?token=…)
 ) -> AsyncGenerator[AsyncSession, None]:
     """Yield a session whose request.jwt.claims carry the VERIFIED caller's claims.
 
@@ -97,23 +96,14 @@ async def get_db(
     payload — never from a client-supplied blob. Requests without a valid Bearer
     token get NO session at all (fail closed).
 
-    ?token= fallback (S4-audit item): EventSource cannot send headers, so the SSE
-    debate endpoint supplies the same JWT as a query param. Rules (security):
-    identical decode path (same HMAC signature check, no looser SSE rules), and the
-    token value is never logged — it is consumed here and discarded.
-
-    COMPLIANCE NOTE (RFC 6750 §2.3 / RFC 9700 §4.3.2, updated): LEGACY — the FE now
-    uses fetch+ReadableStream with the Authorization header (Phase-2 item ③, done);
-    this fallback is kept for exactly one release window and must NOT reach prod
-    (tokens in URLs leak to browser history, proxies, access logs; TokenScrubFilter
-    is the interim mitigation, not the fix). Removal is tracked by
-    tests/test_sse_auth_surface.py::test_openapi_token_param_is_query_optional_not_required.
+    The legacy `?token=` query fallback was removed after its one-release window:
+    tokens in URLs leak into browser history, proxies and access logs. SSE now
+    uses fetch + ReadableStream with the Authorization header, so no credential
+    ever appears in a URL. The removal is pinned by tests/test_sse_auth_surface.py.
     """
     raw = None
     if authorization and authorization.startswith("Bearer "):
         raw = authorization.removeprefix("Bearer ")
-    elif token:
-        raw = token  # EventSource-only surface, identical verification below
     if not raw:
         raise HTTPException(status_code=401, detail="missing or malformed Authorization header")
     try:

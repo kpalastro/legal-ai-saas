@@ -1,0 +1,30 @@
+# Production overrides. Use managed Postgres/Redis in real deployments; this
+# file only removes dev flags and reads secrets from the environment.
+#
+#   docker compose -f infra/docker-compose.yml -f infra/docker-compose.prod.yml up -d
+#
+# Do NOT deploy infra/postgres-init (the auth stub) to production.
+services:
+  api:
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --log-config log_config.json
+    restart: unless-stopped
+    environment:
+      ENVIRONMENT: production
+      DB_REQUIRE_NON_SUPERUSER: "true"
+    volumes:
+      - lexsim_storage:/srv/storage
+
+  worker:
+    restart: unless-stopped
+    environment:
+      ENVIRONMENT: production
+      DB_REQUIRE_NON_SUPERUSER: "true"
+
+  postgres:
+    restart: unless-stopped
+
+  redis:
+    restart: unless-stopped
+
+volumes:
+  lexsim_storage:

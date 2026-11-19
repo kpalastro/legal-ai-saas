@@ -51,6 +51,9 @@ class Settings(BaseSettings):
     # --- auth (self-hosted GoTrue on :9999 locally; hosted Supabase later) ---
     gotrue_url: str = "http://localhost:9999"
     supabase_jwt_secret: str = "dev-only-jwt-secret-change-me"
+    # Optional admin API for deleting the GoTrue identity on account erasure.
+    gotrue_admin_url: str | None = None
+    gotrue_service_role_key: str | None = None
 
     # --- database least privilege ---
     # Every app transaction runs `SET LOCAL ROLE <db_app_role>` so RLS binds even
@@ -64,11 +67,30 @@ class Settings(BaseSettings):
     storage_dir: str = "./storage"
     max_upload_bytes: int = 20 * 1024 * 1024  # 20 MB
 
+    # Tests disable the limiter so Redis state from a previous run cannot make a
+    # later run flaky; the limiter itself is unit-tested directly.
+    rate_limit_enabled: bool = True
+
+    # --- email (dev: Mailpit SMTP catch-all) ---
+    smtp_host: str = "localhost"
+    smtp_port: int = 1025
+    smtp_from: str = "lexsim@localhost"
+
+    # --- observability (optional; no DSN = no external sink) ---
+    sentry_dsn: str | None = None
+
     # --- billing (Stripe test/prod; unset = 503 for real checkout) ---
     stripe_secret_key: str | None = None
     stripe_webhook_secret: str | None = None
     checkout_success_url: str = "http://localhost:3000/?billing=success"
     checkout_cancel_url: str = "http://localhost:3000/?billing=cancel"
+
+    # Browser origins allowed to call the API. JSON list in the environment,
+    # e.g. CORS_ORIGINS='["https://app.example.com"]'.
+    cors_origins: list[str] = [
+        "http://localhost:3000",
+        "http://127.0.0.1:3000",
+    ]
 
     environment: str = "dev"
 

@@ -11,7 +11,7 @@ import hmac
 import json
 import time
 import uuid
-from datetime import timedelta
+from datetime import UTC, datetime, timedelta
 
 import httpx
 import jwt
@@ -19,7 +19,7 @@ import pytest
 import pytest_asyncio
 from sqlalchemy import text
 
-from app.agents.prompts import verdict_from_text
+from app.agents.prompts import PROMPT_VERSION, parse_weakness_report, verdict_from_text
 from app.citations.service import CitationFinding, CitationStatus
 from app.config import get_settings
 from app.db import SessionFactory, arm_request
@@ -313,17 +313,131 @@ async def test_document_gate_attestation_and_export(api, user, case, monkeypatch
     )
     assert reviewed.status_code == 200
 
+    signed = await api.post(
+        f"/documents/{doc['id']}/sign",
+        headers=user["headers"],
+        json={"signer_name": "A. Plaintiff"},
+    )
+    assert signed.status_code == 200, signed.text
+    signature = await api.get(
+        f"/documents/{doc['id']}/signature", headers=user["headers"]
+    )
+    assert signature.json()["signer_name"] == "A. Plaintiff"
+
+    versions = await api.get(
+        f"/documents/{doc['id']}/versions", headers=user["headers"]
+    )
+    assert versions.status_code == 200
+    assert versions.json()[0]["version"] == 1
+
     exported = await api.get(
         f"/documents/{doc['id']}/export?format=txt", headers=user["headers"]
     )
     assert exported.status_code == 200, exported.text
     assert "AI assistance" in exported.text
     assert "attachment; filename=" in exported.headers["content-disposition"]
+    assert exported.headers["x-document-signer"] == "A. Plaintiff"
 
     again = await api.get(
         f"/documents/{doc['id']}/export?format=txt", headers=user["headers"]
     )
     assert again.status_code == 409
+
+
+async def test_document_revision_supersedes_and_exports(api, user, case, monkeypatch):
+    _, done = await _run_sim(api, user, case, monkeypatch)
+    simulation_id = done["simulation_id"]
+    await api.post(
+        f"/simulations/{simulation_id}/attest",
+        headers=user["headers"],
+        json={"user_attestation": True},
+    )
+    first = await api.post(
+        "/documents/generate",
+        headers=user["headers"],
+        json={
+            "case_id": case,
+            "doc_type": "written_submissions",
+            "jurisdiction": "NSW Supreme Court",
+            "verify": False,
+            "fields": {
+                "plaintiff": "A",
+                "defendant": "B",
+                "party_opening": "Opening",
+                "submissions": ["First submission."],
+                "orders": "Orders sought.",
+            },
+        },
+    )
+    assert first.status_code == 200, first.text
+    original = first.json()
+    await api.post(
+        f"/documents/{original['id']}/attest",
+        headers=user["headers"],
+        json={"user_reviewed": True},
+    )
+
+    revised = await api.post(
+        f"/documents/{original['id']}/revise",
+        headers=user["headers"],
+        json={
+            "verify": False,
+            "fields": {
+                "plaintiff": "A",
+                "defendant": "B",
+                "party_opening": "Opening (revised)",
+                "submissions": ["Revised submission."],
+                "orders": "Orders sought.",
+            },
+        },
+    )
+    assert revised.status_code == 200, revised.text
+    new_doc = revised.json()
+    assert new_doc["version"] == 2
+    assert new_doc["supersedes_id"] == original["id"]
+
+    old = await api.get(f"/documents/{original['id']}", headers=user["headers"])
+    assert old.json()["superseded"] is True
+    blocked = await api.get(
+        f"/documents/{original['id']}/export?format=txt", headers=user["headers"]
+    )
+    assert blocked.status_code == 409
+
+    await api.post(
+        f"/documents/{new_doc['id']}/attest",
+        headers=user["headers"],
+        json={"user_reviewed": True},
+    )
+    exported = await api.get(
+        f"/documents/{new_doc['id']}/export?format=txt", headers=user["headers"]
+    )
+    assert exported.status_code == 200
+    assert exported.headers["x-document-version"] == "2"
+
+
+def test_extra_document_types_render():
+    from app.documents.generator import render_document
+
+    damages = render_document(
+        "schedule_of_damages",
+        "NSW Supreme Court",
+        {
+            "plaintiff": "A",
+            "defendant": "B",
+            "items": [{"description": "Invoice", "amount": "$10,000"}],
+            "total": "$10,000",
+        },
+    )
+    assert "SCHEDULE OF DAMAGES" in damages
+    listing = render_document(
+        "list_of_documents",
+        "NSW Supreme Court",
+        {
+            "matter": "A v B",
+            "documents": [{"date": "2026-01-01", "description": "Contract", "party": "A"}],
+        },
+    )
+    assert "LIST OF DOCUMENTS" in listing
 
 
 def test_exporters_produce_real_files():
@@ -503,3 +617,247 @@ async def test_rate_limit_memory_window():
     assert (await consume_memory(key, 2, 60))[0] is True
     allowed, retry = await consume_memory(key, 2, 60)
     assert allowed is False and retry >= 0
+
+
+# ---------- retrieval, analysis, entitlements, privacy ----------
+
+
+async def test_retrieval_finds_the_relevant_chunk(api, user, case, monkeypatch):
+    # A document much larger than the prompt budget: only retrieval can surface
+    # the passage about the issue.
+    body = (
+        "background material about invoices and payments. " * 200
+        + "The breach of contract claim is subject to an arbitration clause. "
+        + "MARKER-ARBITRATION-9931. "
+        + "unrelated appendix material. " * 500
+    ).encode()
+    uploaded = await api.post(
+        f"/cases/{case}/documents",
+        headers=user["headers"],
+        files={"file": ("exhibit.txt", body, "text/plain")},
+    )
+    assert uploaded.status_code == 201, uploaded.text
+    assert uploaded.json()["chunk_count"] > 1
+
+    provider, _ = await _run_sim(api, user, case, monkeypatch)
+    assert "MARKER-ARBITRATION-9931" in provider.requests[0]
+
+
+class AnalysisStub(StubProvider):
+    async def complete(self, req):
+        self.requests.append(req.user)
+        return LLMResponse(
+            text=json.dumps(
+                {
+                    "summary": "The plaintiff's case is vulnerable on causation.",
+                    "weaknesses": [
+                        {
+                            "issue": "Causation",
+                            "side": "plaintiff",
+                            "severity": "high",
+                            "why": "No expert evidence links the loss to the breach.",
+                            "evidence_gap": "Expert report",
+                            "next_step": "Obtain a causation report.",
+                        }
+                    ],
+                }
+            ),
+            model=self.model,
+            prompt_tokens=1,
+            completion_tokens=1,
+        )
+
+
+async def test_weakness_analysis_is_stored_and_audited(api, user, case, monkeypatch):
+    _, done = await _run_sim(api, user, case, monkeypatch)
+    simulation_id = done["simulation_id"]
+
+    import app.llm as llm_module
+
+    monkeypatch.setattr(llm_module, "get_provider", lambda: AnalysisStub())
+    response = await api.post(
+        f"/simulations/{simulation_id}/analysis",
+        headers=user["headers"],
+        json={"verify_citations": False},
+    )
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["weakness_report"]["weaknesses"][0]["issue"] == "Causation"
+    assert body["hallucination_score"] == 0.0
+
+    detail = await api.get(f"/simulations/{simulation_id}", headers=user["headers"])
+    assert detail.json()["weakness_report"]["weaknesses"][0]["severity"] == "high"
+
+    async with SessionFactory() as session:
+        await session.execute(text("SET LOCAL search_path = public, auth"))
+        audit = (
+            await session.execute(
+                text(
+                    "SELECT prompt_version FROM public.audit_log"
+                    " WHERE case_id = :c AND event_type = 'simulation_analysis'"
+                ),
+                {"c": case},
+            )
+        ).scalars().all()
+    assert audit and audit[0] == PROMPT_VERSION
+
+
+def test_weakness_parser_never_raises():
+    parsed = parse_weakness_report('{"summary": "ok", "weaknesses": []}')
+    assert parsed["summary"] == "ok"
+    assert parsed["weaknesses"] == []
+    fallback = parse_weakness_report("not json at all")
+    assert fallback["parse_error"] is True
+    assert fallback["weaknesses"] == []
+
+
+async def test_case_quota_and_upgrade(api, user, case, monkeypatch, settings):
+    # Free tier allows 2 cases; the fixture created one.
+    second = await api.post(
+        "/cases",
+        headers=user["headers"],
+        json={
+            "title": "[TEST] second matter",
+            "jurisdiction": "NSW",
+            "cause_of_action": "contract",
+        },
+    )
+    assert second.status_code == 201
+    third = await api.post(
+        "/cases",
+        headers=user["headers"],
+        json={
+            "title": "[TEST] third matter",
+            "jurisdiction": "NSW",
+            "cause_of_action": "contract",
+        },
+    )
+    assert third.status_code == 402
+
+    monkeypatch.setattr(settings, "stripe_webhook_secret", "whsec_test_secret")
+    payload = json.dumps(
+        {
+            "type": "checkout.session.completed",
+            "data": {
+                "object": {
+                    "client_reference_id": user["id"],
+                    "metadata": {"plan": "lawyer_monthly_unlimited"},
+                }
+            },
+        }
+    ).encode()
+    timestamp = int(time.time())
+    signature = hmac.new(
+        b"whsec_test_secret", f"{timestamp}.".encode() + payload, hashlib.sha256
+    ).hexdigest()
+    upgraded = await api.post(
+        "/billing/webhook",
+        content=payload,
+        headers={
+            "content-type": "application/json",
+            "stripe-signature": f"t={timestamp},v1={signature}",
+        },
+    )
+    assert upgraded.status_code == 200
+
+    third = await api.post(
+        "/cases",
+        headers=user["headers"],
+        json={
+            "title": "[TEST] third matter after upgrade",
+            "jurisdiction": "NSW",
+            "cause_of_action": "contract",
+        },
+    )
+    assert third.status_code == 201
+
+    me = await api.get("/users/me", headers=user["headers"])
+    assert me.json()["limits"]["cases"] is None
+    assert me.json()["usage"]["cases"] == 3
+
+
+async def test_legal_hold_blocks_erasure_then_erase_deidentifies(api, user, case):
+    held = await api.post(
+        f"/cases/{case}/legal-hold", headers=user["headers"], json={"legal_hold": True}
+    )
+    assert held.status_code == 200 and held.json()["legal_hold"] is True
+
+    blocked = await api.post(
+        "/users/me/erase", headers=user["headers"], json={"confirm": "ERASE"}
+    )
+    assert blocked.status_code == 409
+
+    released = await api.post(
+        f"/cases/{case}/legal-hold", headers=user["headers"], json={"legal_hold": False}
+    )
+    assert released.status_code == 200
+
+    erased = await api.post(
+        "/users/me/erase", headers=user["headers"], json={"confirm": "ERASE"}
+    )
+    assert erased.status_code == 200, erased.text
+    assert erased.json()["cases_deidentified"] == 1
+    assert erased.json()["audit_retained"] is True
+    assert erased.json()["identity_deleted"] is False  # admin API not configured
+
+    detail = await api.get(f"/cases/{case}", headers=user["headers"])
+    assert detail.json()["title"] == "[erased]"
+    assert detail.json()["description"] is None
+    me = await api.get("/users/me", headers=user["headers"])
+    assert me.json()["email"].startswith("erased+")
+    assert me.json()["erased_at"] is not None
+
+
+async def test_export_and_calendar(api, user, case):
+    export = await api.get("/users/me/export", headers=user["headers"])
+    assert export.status_code == 200
+    body = export.json()
+    assert body["format_version"] == 1
+    assert body["cases"][0]["id"] == case
+
+    await api.post(
+        f"/cases/{case}/deadlines",
+        headers=user["headers"],
+        json={
+            "doc_type": "statement_of_claim",
+            "jurisdiction": "NSW Supreme Court",
+            "served_on": "2026-11-19",
+        },
+    )
+    ics = await api.get(f"/cases/{case}/deadlines.ics", headers=user["headers"])
+    assert ics.status_code == 200
+    assert "BEGIN:VCALENDAR" in ics.text
+    assert "DTSTART;VALUE=DATE:2026" in ics.text
+
+
+async def test_retention_deidentifies_old_cases_unless_held(user, case):
+    from worker.main import retention_sweep
+
+    old = datetime.now(UTC) - timedelta(days=365 * 8)
+    async with SessionFactory() as session:
+        await session.execute(
+            text("UPDATE public.cases SET created_at = :d, legal_hold = TRUE WHERE id = :c"),
+            {"d": old, "c": case},
+        )
+        await session.commit()
+
+    result = await retention_sweep({})
+    assert result["erased"] == 0
+
+    async with SessionFactory() as session:
+        await session.execute(
+            text("UPDATE public.cases SET legal_hold = FALSE WHERE id = :c"), {"c": case}
+        )
+        await session.commit()
+
+    result = await retention_sweep({})
+    assert result["erased"] >= 1
+
+    async with SessionFactory() as session:
+        await session.execute(text("SET LOCAL search_path = public, auth"))
+        title = (
+            await session.execute(
+                text("SELECT title FROM public.cases WHERE id = :c"), {"c": case}
+            )
+        ).scalar_one()
+    assert title == "[erased]"

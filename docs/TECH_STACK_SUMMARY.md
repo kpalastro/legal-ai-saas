@@ -78,6 +78,7 @@ so turn-1 never blanks.
 
 ## Slide 7 — What's deliberately not done yet
 
-Phase 2, tracked in `requirement/PENDING.md`: FORCE RLS + secret rotation before
-real case data, header-safe SSE (drop `?token=`), real Stripe SDK + webhook
-verification, Bedrock Sydney swap, self-hosted CI runner for the drift job.
+Phase 2, tracked in `requirement/PENDING.md`: secret rotation before real case
+data, Bedrock Sydney swap, self-hosted CI runner for the drift job. FORCE RLS,
+header-only SSE (no `?token=`), Stripe checkout + signed webhooks, and
+organisations/RBAC are implemented.

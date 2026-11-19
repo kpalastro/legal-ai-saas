@@ -1,11 +1,14 @@
 # LexSim AI — Current Architecture (31 Aug 2026; product loop completed 19 Nov 2026)
 
-> **19 Nov 2026 completion note:** the debate is now grounded in case intake +
-> extracted uploads and carries the transcript forward; app transactions bind
-> `lexsim_app` on every request (`arm_request`) so RLS actually applies; uploads,
-> simulation attestation, DOCX/PDF export, persisted deadlines/limitations,
-> Stripe checkout/webhooks, request ids, rate limiting and migration 0003 are in
-> place. See `README.md` and `requirement/PENDING.md` for the current state.
+> **19 Nov 2026 completion note:** the debate is grounded in case intake +
+> retrieved upload chunks and carries the transcript forward; app transactions
+> bind `lexsim_app` on every request (`arm_request`) so RLS actually applies;
+> uploads, simulation attestation, DOCX/PDF export, deadlines/limitations,
+> weakness/claim/element analysis, organisations/RBAC + sharing, legal registry,
+> Stripe checkout/webhooks, request ids, rate limiting, metrics, consent,
+> document versions/signatures, conflict checks, support resources, and
+> migrations 0003–0006 are in place. Containers use the `lexsim_api` login role.
+> See `README.md` and `requirement/PENDING.md` for the current state.
 
 ## Runtime topology (localhost v1)
 
@@ -15,7 +18,7 @@
                          │  Next.js 16.3.3 · React 19 · SSE ES  │
                          └───────────┬──────────────────────────┘
                       :3000 (apps/web)│
-               fetch+JWT │            │ EventSource ?token=
+               fetch+JWT │            │ fetch + ReadableStream (JWT header)
                          ▼            ▼
 ┌───────────────────────────────────────────────────────────────────────┐
 │                    apps/api  — FastAPI :8000 (+ arq worker)           │
@@ -51,7 +54,7 @@
 ## Data-flow: one debate turn
 
 ```
-POST /cases/{id}/simulate?token=JWT
+GET /cases/{id}/simulate   (Authorization: Bearer <JWT>)
   → get_db(): decode+verify JWT (HMAC) → SET LOCAL request.jwt.claims
   → run_debate(): DebateState cursor → PROTOCOL[turn]
       → OllamaProvider.complete(role presets: num_ctx/num_predict/samplers, seed for JUDGE)
@@ -81,8 +84,8 @@ required before any real case data (`COMPLIANCE_NOTE` in `bedrock.py`).
 
 ## Known constraints (v1, deliberate)
 
-- `?token=` in SSE URLs — RFC 6750-discouraged, dev-only; dies with EventSource
-  in Phase 2 (fetch ReadableStream or one-time stream ticket).
+- SSE credentials are header-only (fetch + ReadableStream); the legacy `?token=`
+  fallback was removed after its one-release window.
 - postgres role is owner+superuser in dev → owner-bypass RLS allowed for
   migrations; FORCE ROW LEVEL SECURITY is the Phase-2 pre-prod item.
 - Deadlines cover the documented rule set (statement_of_claim/correspondence/

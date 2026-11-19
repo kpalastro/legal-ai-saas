@@ -71,9 +71,9 @@ services:
       # OLLAMA_HOST=0.0.0.0 (Ollama has no auth).
       OLLAMA_BASE_URL: http://host.docker.internal:11434
       LLM_MODEL: qwen3.5:0.8b
-      DATABASE_URL: postgresql+asyncpg://postgres:postgres@postgres:5432/lexsim
-      # App queries run SET LOCAL ROLE lexsim_app — the postgres connection
-      # would otherwise bypass RLS even with FORCE ROW LEVEL SECURITY.
+      # Dedicated login role; app queries then SET LOCAL ROLE lexsim_app so RLS
+      # binds. Migrations still run as the owner over the host/CI DSN.
+      DATABASE_URL: postgresql+asyncpg://lexsim_api:lexsim_api_dev@postgres:5432/lexsim
       DB_APP_ROLE: lexsim_app
       DB_REQUIRE_NON_SUPERUSER: "true"
       REDIS_URL: redis://redis:6379/0
@@ -97,7 +97,13 @@ services:
       LLM_PROVIDER: ollama
       OLLAMA_BASE_URL: http://host.docker.internal:11434
       LLM_MODEL: qwen3.5-fast:latest          # integration tier per TEST_PLAN v1.1
-      DATABASE_URL: postgresql+asyncpg://postgres:postgres@postgres:5432/lexsim
+      DATABASE_URL: postgresql+asyncpg://lexsim_api:lexsim_api_dev@postgres:5432/lexsim
+      DB_APP_ROLE: lexsim_app
       REDIS_URL: redis://redis:6379/0
+      SMTP_HOST: mailpit
+      SMTP_PORT: "1025"
     extra_hosts: ["host.docker.internal:host-gateway"]
-    depends_on: { postgres: { condition: service_healthy }, redis: { condition: service_healthy } }
+    depends_on:
+      postgres: { condition: service_healthy }
+      redis: { condition: service_healthy }
+      mailpit: { condition: service_started }

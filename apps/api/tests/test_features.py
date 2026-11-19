@@ -20,7 +20,15 @@ def test_g3_prohibited_doc_types_rejected():
 
 
 def test_g3_allowed_doc_types_pass():
-    for ok in ("statement_of_claim", "defence", "chronology", "written_submissions", "court_correspondence"):
+    for ok in (
+        "statement_of_claim",
+        "defence",
+        "chronology",
+        "written_submissions",
+        "court_correspondence",
+        "schedule_of_damages",
+        "list_of_documents",
+    ):
         assert require_allowed_doc_type(ok).value == ok
 
 

@@ -12,6 +12,7 @@ audit rows for turns already completed.
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import json
 import logging
 from collections.abc import AsyncGenerator
@@ -22,8 +23,22 @@ from pydantic import BaseModel, Field
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.agents.engine import run_debate
+from app.agents.debate_state_machine import AgentRole
+from app.agents.engine import case_context, run_debate
+from app.agents.prompts import (
+    ANALYSIS_INSTRUCTION,
+    ANALYSIS_SYSTEM,
+    PROMPT_VERSION,
+    parse_weakness_report,
+)
+from app.audit import write_audit_row
+from app.citations import verify_citations
 from app.db import SessionFactory, arm_request, get_db
+from app.entitlements import enforce_case_limit, enforce_simulation_limit
+from app.organisations import require_case_writer
+from app.llm.base import LLMRequest
+from app.llm.presets import options_for
+from app.ratelimit import rate_limit
 
 logger = logging.getLogger(__name__)
 
@@ -41,6 +56,7 @@ class CaseCreate(BaseModel):
     relief_sought: str | None = Field(default=None, max_length=5_000)
     court: str | None = Field(default=None, max_length=200)
     case_number: str | None = Field(default=None, max_length=100)
+    org_id: str | None = None
 
 
 class CaseUpdate(BaseModel):
@@ -106,17 +122,30 @@ def _case_dict(row) -> dict:
 async def create_case(body: CaseCreate, db: AsyncSession = Depends(get_db)) -> dict:
     sub = await _caller_sub(db)
     await _mirror_user(db, sub, db.info.get("user_email"))
+    await enforce_case_limit(db, sub)
+    if body.org_id:
+        writer = (
+            await db.execute(
+                text("SELECT public.is_org_writer(:o) AS ok"), {"o": body.org_id}
+            )
+        ).scalar_one_or_none()
+        if writer is not True:
+            raise HTTPException(
+                status_code=403,
+                detail="you need a writer role in the target organisation",
+            )
     result = await db.execute(
         text(
             "INSERT INTO public.cases"
-            " (user_id, title, jurisdiction, cause_of_action, description, parties,"
-            "  issues, relief_sought, court, case_number)"
-            " VALUES (:u, :t, :j, :a, :d, CAST(:p AS jsonb), CAST(:i AS jsonb),"
+            " (user_id, org_id, title, jurisdiction, cause_of_action, description,"
+            "  parties, issues, relief_sought, court, case_number)"
+            " VALUES (:u, :org, :t, :j, :a, :d, CAST(:p AS jsonb), CAST(:i AS jsonb),"
             "         :r, :court, :num)"
             " RETURNING id, status"
         ),
         {
             "u": sub,
+            "org": body.org_id,
             "t": body.title,
             "j": body.jurisdiction,
             "a": body.cause_of_action,
@@ -142,7 +171,7 @@ async def list_cases(
     rows = (
         await db.execute(
             text(
-                "SELECT id, title, jurisdiction, court, cause_of_action, status,"
+                "SELECT id, org_id, title, jurisdiction, court, cause_of_action, status,"
                 " created_at, updated_at"
                 " FROM public.cases ORDER BY created_at DESC LIMIT :l OFFSET :o"
             ),
@@ -151,8 +180,9 @@ async def list_cases(
     ).mappings().all()
     return [
         {
-            **{k: r[k] for k in ("id", "title", "jurisdiction", "court", "cause_of_action", "status")},
+            **{k: r[k] for k in ("title", "jurisdiction", "court", "cause_of_action", "status")},
             "id": str(r["id"]),
+            "org_id": str(r["org_id"]) if r["org_id"] else None,
             "created_at": r["created_at"].isoformat() if r["created_at"] else None,
             "updated_at": r["updated_at"].isoformat() if r["updated_at"] else None,
         }
@@ -269,6 +299,122 @@ async def get_simulation(simulation_id: str, db: AsyncSession = Depends(get_db))
     }
 
 
+def _sha(value: str) -> str:
+    return hashlib.sha256(value.encode()).hexdigest()
+
+
+def _citation_risk(findings) -> tuple[float, str]:
+    """Map verified / unverified / flagged citations to a 0-1 risk score."""
+    if not findings:
+        return 0.0, "no citations detected in the transcript"
+    weights = {
+        "verified": 0.0,
+        "unverified": 0.5,
+        "flagged": 1.0,
+    }
+    score = sum(weights.get(f.status.value, 0.5) for f in findings) / len(findings)
+    return round(score, 3), f"{len(findings)} citation(s) checked"
+
+
+class AnalysisBody(BaseModel):
+    verify_citations: bool = True
+
+
+@simulations_router.post(
+    "/{simulation_id}/analysis",
+    dependencies=[Depends(rate_limit("analysis", 10, 60))],
+)
+async def analyse_simulation(
+    simulation_id: str,
+    body: AnalysisBody | None = None,
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    """Post-debate weakness analysis. Not a tenth protocol turn (G6 is fixed)."""
+    from app.llm import get_provider
+
+    row = (
+        await db.execute(
+            text(
+                "SELECT id, case_id, status, debate_transcript"
+                " FROM public.simulations WHERE id = :id"
+            ),
+            {"id": simulation_id},
+        )
+    ).mappings().first()
+    if row is None:
+        raise HTTPException(status_code=404, detail="simulation not found")
+    if row["status"] != "completed":
+        raise HTTPException(status_code=409, detail="simulation is not completed")
+
+    case_id = str(row["case_id"])
+    await require_case_writer(db, case_id)
+    context = await case_context(db, case_id)
+    turns = row["debate_transcript"] or []
+    transcript = "\n\n".join(
+        f"Turn {turn.get('turn')} ({turn.get('role')} — {turn.get('name')}): "
+        f"{turn.get('content')}"
+        for turn in turns
+        if isinstance(turn, dict)
+    )[:20_000]
+
+    user_prompt = f"{context}\n\nTRANSCRIPT:\n{transcript}\n\n{ANALYSIS_INSTRUCTION}"
+    provider = get_provider()
+    try:
+        response = await provider.complete(
+            LLMRequest(
+                system=ANALYSIS_SYSTEM,
+                user=user_prompt,
+                options=options_for(AgentRole.JUDGE),
+                max_tokens=1_500,
+            )
+        )
+    except Exception:  # noqa: BLE001 — provider failure is a 502, not a 500
+        logger.exception("analysis provider failed for simulation %s", simulation_id)
+        raise HTTPException(status_code=502, detail="analysis provider failed") from None
+
+    report = parse_weakness_report(response.text)
+    findings = (
+        await verify_citations(transcript)
+        if (body is None or body.verify_citations)
+        else []
+    )
+    score, risk_note = _citation_risk(findings)
+    report["citation_risk"] = {
+        "score": score,
+        "note": risk_note,
+        "checked": len(findings),
+    }
+
+    await db.execute(
+        text(
+            "UPDATE public.simulations"
+            " SET weakness_report = CAST(:w AS jsonb), hallucination_score = :s"
+            " WHERE id = :id"
+        ),
+        {"w": json.dumps(report), "s": score, "id": simulation_id},
+    )
+    await write_audit_row(
+        db,
+        case_id=case_id,
+        user_id=await _caller_sub(db),
+        event_type="simulation_analysis",
+        model_id=response.model,
+        prompt_text=f"{ANALYSIS_SYSTEM}\n\n{user_prompt}",
+        response_text=response.text,
+        prompt_sha=_sha(f"{ANALYSIS_SYSTEM}\n\n{user_prompt}"),
+        response_sha=_sha(response.text),
+        prompt_version=PROMPT_VERSION,
+        model_digest=getattr(response, "digest", None),
+    )
+    await db.commit()
+    return {
+        "simulation_id": simulation_id,
+        "weakness_report": report,
+        "hallucination_score": score,
+        "citation_risk": report["citation_risk"],
+    }
+
+
 class AttestSimulationBody(BaseModel):
     user_attestation: bool
 
@@ -281,6 +427,15 @@ async def attest_simulation(
 ) -> dict:
     if not body.user_attestation:
         raise HTTPException(status_code=422, detail="user_attestation must be true to attest")
+    case_row = (
+        await db.execute(
+            text("SELECT case_id FROM public.simulations WHERE id = :id"),
+            {"id": simulation_id},
+        )
+    ).scalar_one_or_none()
+    if case_row is None:
+        raise HTTPException(status_code=404, detail="simulation not found")
+    await require_case_writer(db, str(case_row))
     row = (
         await db.execute(
             text(
@@ -322,6 +477,8 @@ async def simulate_sse(
     db: AsyncSession = Depends(get_db),
 ):
     sub = await _caller_sub(db)
+    await require_case_writer(db, case_id)
+    await enforce_simulation_limit(db, sub)
     from app.llm import get_provider
 
     notes = [n.strip()[:2_000] for n in (interventions or []) if n and n.strip()][:10]

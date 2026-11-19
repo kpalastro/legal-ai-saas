@@ -14,6 +14,7 @@ const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 const GOTRUE_URL = process.env.NEXT_PUBLIC_GOTRUE_URL ?? "http://localhost:9999";
 const TOKEN_KEY = "lexsim_token";
 const REFRESH_KEY = "lexsim_refresh";
+const CONSENT_VERSION = "2026-11-19";
 
 type Auth = { access: string; refresh: string };
 
@@ -34,6 +35,7 @@ type Turn = {
 
 type CaseRow = {
   id: string;
+  org_id?: string | null;
   title: string;
   jurisdiction: string;
   court?: string | null;
@@ -42,22 +44,111 @@ type CaseRow = {
   created_at?: string | null;
 };
 
+type Organisation = {
+  id: string;
+  name: string;
+  owner_id: string;
+  role: string;
+  member_count: number;
+  created_at?: string | null;
+};
+
+type OrgMember = {
+  user_id: string;
+  email: string;
+  role: string;
+  created_at?: string | null;
+};
+
+type OrgDetail = {
+  id: string;
+  name: string;
+  owner_id: string;
+  members: OrgMember[];
+};
+
 type CaseDetail = CaseRow & {
   description?: string | null;
   parties?: { name?: string; role?: string }[];
   issues?: string[];
   relief_sought?: string | null;
   case_number?: string | null;
+  legal_hold?: boolean;
+  erased_at?: string | null;
   simulation_count?: number;
   document_count?: number;
   generated_document_count?: number;
   deadline_count?: number;
 };
 
+type Weakness = {
+  issue: string;
+  side: "plaintiff" | "defendant";
+  severity: "high" | "medium" | "low";
+  why?: string;
+  evidence_gap?: string;
+  next_step?: string;
+};
+
+type Claim = {
+  claim: string;
+  support: "supported" | "unsupported" | "uncertain";
+  source?: string;
+};
+
+type ElementCheck = {
+  element: string;
+  status: "addressed" | "missing" | "unclear";
+  note?: string;
+};
+
+type WeaknessReport = {
+  summary: string;
+  weaknesses: Weakness[];
+  claims?: Claim[];
+  elements?: ElementCheck[];
+  note?: string;
+  methodology_note?: string;
+  parse_error?: boolean;
+  citation_risk?: { score: number; note: string; checked: number };
+};
+
+type Resource = {
+  name: string;
+  phone?: string | null;
+  url?: string | null;
+  when: string;
+};
+
+type ConflictMatch = {
+  source: "case" | "register";
+  case_id?: string;
+  title?: string;
+  party: string;
+  role?: string;
+  id?: string;
+  org_id?: string;
+  matter_ref?: string | null;
+  note?: string | null;
+};
+
+type CourtPolicy = {
+  court: string;
+  policy: string;
+  ai_disclosure_required: boolean;
+  citation_verification_required: boolean;
+  human_review_required: boolean;
+  prohibited_doc_types: string[];
+  notes: string;
+  disclaimer: string;
+};
+
 type SimulationRow = {
   id: string;
   status: string;
   outcome_prediction?: Turn["verdict"] | null;
+  weakness_report?: WeaknessReport | null;
+  hallucination_score?: number | null;
   user_attestation: boolean;
   user_attested_at?: string | null;
   created_at?: string | null;
@@ -84,6 +175,11 @@ type Citation = {
 type GeneratedDoc = {
   id: string;
   doc_type: string;
+  version?: number;
+  superseded?: boolean;
+  content_sha256?: string | null;
+  signer_name?: string | null;
+  signed_at?: string | null;
   content?: string;
   citations?: Citation[];
   simulation_id?: string | null;
@@ -121,6 +217,7 @@ type Plan = {
   amount_cents: number;
   currency: string;
   interval?: string | null;
+  limits?: { cases: number | null; simulations_per_month: number | null };
 };
 
 type Me = {
@@ -128,6 +225,9 @@ type Me = {
   email: string;
   role: string;
   subscription_tier?: string | null;
+  erased_at?: string | null;
+  limits?: { cases: number | null; simulations_per_month: number | null };
+  usage?: { cases: number; simulations_this_month: number };
 };
 
 function withAuth(token: string, init: RequestInit = {}): RequestInit {
@@ -135,6 +235,15 @@ function withAuth(token: string, init: RequestInit = {}): RequestInit {
     ...init,
     headers: { ...(init.headers ?? {}), Authorization: `Bearer ${token}` },
   };
+}
+
+function downloadBlob(blob: Blob, filename: string) {
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = filename;
+  anchor.click();
+  URL.revokeObjectURL(url);
 }
 
 function lines(value: string): string[] {
@@ -165,6 +274,21 @@ export default function Home() {
   const [me, setMe] = useState<Me | null>(null);
   const [cases, setCases] = useState<CaseRow[]>([]);
   const [plans, setPlans] = useState<Plan[]>([]);
+  const [orgs, setOrgs] = useState<Organisation[]>([]);
+  const [orgName, setOrgName] = useState("");
+  const [orgDetail, setOrgDetail] = useState<OrgDetail | null>(null);
+  const [selectedOrgId, setSelectedOrgId] = useState<string | null>(null);
+  const [memberEmail, setMemberEmail] = useState("");
+  const [memberRole, setMemberRole] = useState("lawyer");
+  const [newCaseOrgId, setNewCaseOrgId] = useState("");
+  const [shareOrgId, setShareOrgId] = useState("");
+  const [courtPolicy, setCourtPolicy] = useState<CourtPolicy | null>(null);
+  const [elements, setElements] = useState<string[]>([]);
+  const [resources, setResources] = useState<Resource[]>([]);
+  const [docVersions, setDocVersions] = useState<GeneratedDoc[]>([]);
+  const [signerName, setSignerName] = useState("");
+  const [conflictName, setConflictName] = useState("");
+  const [conflictMatches, setConflictMatches] = useState<ConflictMatch[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [detail, setDetail] = useState<CaseDetail | null>(null);
   const [simulations, setSimulations] = useState<SimulationRow[]>([]);
@@ -173,6 +297,8 @@ export default function Home() {
   const [deadlines, setDeadlines] = useState<Deadline[]>([]);
   const [turns, setTurns] = useState<Turn[]>([]);
   const [simulationId, setSimulationId] = useState<string | null>(null);
+  const [analysis, setAnalysis] = useState<WeaknessReport | null>(null);
+  const [analysisFor, setAnalysisFor] = useState<string | null>(null);
   const [tab, setTab] = useState<"overview" | "simulation" | "documents" | "deadlines">(
     "overview"
   );
@@ -286,6 +412,11 @@ export default function Home() {
     if (response.ok) setCases((await response.json()) as CaseRow[]);
   }, [authFetch]);
 
+  const loadOrgs = useCallback(async () => {
+    const response = await authFetch("/organisations");
+    if (response.ok) setOrgs((await response.json()) as Organisation[]);
+  }, [authFetch]);
+
   useEffect(() => {
     if (!auth) return;
     void (async () => {
@@ -293,9 +424,15 @@ export default function Home() {
       if (meResponse.ok) setMe((await meResponse.json()) as Me);
       const plansResponse = await authFetch("/billing/plans");
       if (plansResponse.ok) setPlans((await plansResponse.json()) as Plan[]);
+      const resourcesResponse = await authFetch("/legal/resources");
+      if (resourcesResponse.ok) {
+        const body = (await resourcesResponse.json()) as { resources?: Resource[] };
+        setResources(body.resources ?? []);
+      }
       await loadCases();
+      await loadOrgs();
     })();
-  }, [auth, authFetch, loadCases]);
+  }, [auth, authFetch, loadCases, loadOrgs]);
 
   const refreshCaseCollections = useCallback(
     async (caseId: string) => {
@@ -307,7 +444,25 @@ export default function Home() {
           authFetch(`/cases/${caseId}/generated-documents`),
           authFetch(`/cases/${caseId}/deadlines`),
         ]);
-      if (detailResponse.ok) setDetail((await detailResponse.json()) as CaseDetail);
+      if (detailResponse.ok) {
+        const caseDetail = (await detailResponse.json()) as CaseDetail;
+        setDetail(caseDetail);
+        const [policyResponse, elementsResponse] = await Promise.all([
+          authFetch(
+            `/legal/court-policies?court=${encodeURIComponent(
+              caseDetail.court || caseDetail.jurisdiction || ""
+            )}`
+          ),
+          authFetch(
+            `/legal/elements?cause=${encodeURIComponent(caseDetail.cause_of_action || "")}`
+          ),
+        ]);
+        if (policyResponse.ok) setCourtPolicy((await policyResponse.json()) as CourtPolicy);
+        if (elementsResponse.ok) {
+          const registry = (await elementsResponse.json()) as { elements?: string[] };
+          setElements(registry.elements ?? []);
+        }
+      }
       if (simsResponse.ok) setSimulations((await simsResponse.json()) as SimulationRow[]);
       if (uploadsResponse.ok) setUploads((await uploadsResponse.json()) as UploadedDoc[]);
       if (docsResponse.ok) setGenerated((await docsResponse.json()) as GeneratedDoc[]);
@@ -316,6 +471,17 @@ export default function Home() {
     [authFetch]
   );
 
+  useEffect(() => {
+    if (!activeDoc) {
+      setDocVersions([]);
+      return;
+    }
+    void (async () => {
+      const response = await authFetch(`/documents/${activeDoc.id}/versions`);
+      if (response.ok) setDocVersions((await response.json()) as GeneratedDoc[]);
+    })();
+  }, [activeDoc, authFetch]);
+
   const openCase = useCallback(
     async (caseId: string) => {
       setSelectedId(caseId);
@@ -323,6 +489,11 @@ export default function Home() {
       setTurns([]);
       setSimulationId(null);
       setActiveDoc(null);
+      setAnalysis(null);
+      setAnalysisFor(null);
+      setCourtPolicy(null);
+      setElements([]);
+      setShareOrgId("");
       setError(null);
       await refreshCaseCollections(caseId);
     },
@@ -354,6 +525,15 @@ export default function Home() {
       }
       const data = (await login.json()) as { access_token: string; refresh_token: string };
       saveAuth({ access: data.access_token, refresh: data.refresh_token });
+      // Record the APP 5 collection-notice acknowledgement with the API.
+      await fetch(`${API_URL}/users/me/consent`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${data.access_token}`,
+        },
+        body: JSON.stringify({ consent_version: CONSENT_VERSION }),
+      });
       setNotice(null);
     } finally {
       setBusy(null);
@@ -372,6 +552,7 @@ export default function Home() {
           jurisdiction,
           cause_of_action: causeOfAction,
           court,
+          org_id: newCaseOrgId || null,
           case_number: caseNumber || null,
           description: description || null,
           issues: lines(issuesText),
@@ -391,6 +572,7 @@ export default function Home() {
       setPartiesText("");
       setRelief("");
       setCaseNumber("");
+      setNewCaseOrgId("");
       await loadCases();
       await openCase(created.id);
     } finally {
@@ -404,6 +586,8 @@ export default function Home() {
     setNotice(null);
     setTurns([]);
     setSimulationId(null);
+    setAnalysis(null);
+    setAnalysisFor(null);
     setBusy("simulation");
     const abort = new AbortController();
     abortRef.current = abort;
@@ -479,6 +663,224 @@ export default function Home() {
     }
   }
 
+  async function analyseSimulation(id: string) {
+    setBusy(`analysis-${id}`);
+    setError(null);
+    setNotice(null);
+    try {
+      const response = await authFetch(`/simulations/${id}/analysis`, {
+        method: "POST",
+        body: JSON.stringify({ verify_citations: true }),
+      });
+      if (!response.ok) {
+        setError(await errorText(response));
+        return;
+      }
+      const data = (await response.json()) as {
+        weakness_report: WeaknessReport;
+        hallucination_score: number;
+      };
+      setAnalysis({
+        ...data.weakness_report,
+        citation_risk:
+          data.weakness_report.citation_risk ?? {
+            score: data.hallucination_score,
+            note: "",
+            checked: 0,
+          },
+      });
+      setAnalysisFor(id);
+      if (selectedId) await refreshCaseCollections(selectedId);
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function toggleLegalHold(value: boolean) {
+    if (!selectedId) return;
+    setBusy("legal-hold");
+    setError(null);
+    try {
+      const response = await authFetch(`/cases/${selectedId}/legal-hold`, {
+        method: "POST",
+        body: JSON.stringify({ legal_hold: value }),
+      });
+      if (!response.ok) {
+        setError(await errorText(response));
+        return;
+      }
+      setNotice(
+        value
+          ? "Legal hold set — erasure and retention are blocked."
+          : "Legal hold released."
+      );
+      await refreshCaseCollections(selectedId);
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function downloadCalendar() {
+    if (!selectedId) return;
+    setError(null);
+    const response = await authFetch(`/cases/${selectedId}/deadlines.ics`);
+    if (!response.ok) {
+      setError(await errorText(response));
+      return;
+    }
+    downloadBlob(await response.blob(), "lexsim-deadlines.ics");
+  }
+
+  async function exportMyData() {
+    setBusy("export-data");
+    setError(null);
+    try {
+      const response = await authFetch("/users/me/export");
+      if (!response.ok) {
+        setError(await errorText(response));
+        return;
+      }
+      const data = await response.json();
+      downloadBlob(
+        new Blob([JSON.stringify(data, null, 2)], { type: "application/json" }),
+        "lexsim-data-export.json"
+      );
+      setNotice("Data export downloaded.");
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function eraseMyAccount() {
+    if (
+      !window.confirm(
+        "This de-identifies all your cases and removes uploads. Append-only audit records are retained for legal/LPP obligations."
+      )
+    ) {
+      return;
+    }
+    if (window.prompt("Type ERASE to confirm") !== "ERASE") return;
+    setBusy("erase-account");
+    setError(null);
+    try {
+      const response = await authFetch("/users/me/erase", {
+        method: "POST",
+        body: JSON.stringify({ confirm: "ERASE" }),
+      });
+      if (!response.ok) {
+        setError(await errorText(response));
+        return;
+      }
+      setNotice("Account data de-identified; audit records retained.");
+      setSelectedId(null);
+      setDetail(null);
+      await loadCases();
+      const meResponse = await authFetch("/users/me");
+      if (meResponse.ok) setMe((await meResponse.json()) as Me);
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function createOrganisation(event: React.FormEvent) {
+    event.preventDefault();
+    if (!orgName.trim()) return;
+    setBusy("org");
+    setError(null);
+    try {
+      const response = await authFetch("/organisations", {
+        method: "POST",
+        body: JSON.stringify({ name: orgName.trim() }),
+      });
+      if (!response.ok) {
+        setError(await errorText(response));
+        return;
+      }
+      const created = (await response.json()) as { id: string };
+      setOrgName("");
+      await loadOrgs();
+      await openOrganisation(created.id);
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function openOrganisation(orgId: string) {
+    setSelectedOrgId(orgId);
+    const response = await authFetch(`/organisations/${orgId}`);
+    if (response.ok) setOrgDetail((await response.json()) as OrgDetail);
+  }
+
+  async function addMember(event: React.FormEvent) {
+    event.preventDefault();
+    if (!selectedOrgId || !memberEmail.trim()) return;
+    setBusy("member");
+    setError(null);
+    try {
+      const response = await authFetch(
+        `/organisations/${selectedOrgId}/members`,
+        {
+          method: "POST",
+          body: JSON.stringify({ email: memberEmail.trim(), role: memberRole }),
+        }
+      );
+      if (!response.ok) {
+        setError(await errorText(response));
+        return;
+      }
+      setMemberEmail("");
+      await openOrganisation(selectedOrgId);
+      await loadOrgs();
+      setNotice("Member added.");
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function removeMember(userId: string) {
+    if (!selectedOrgId) return;
+    setError(null);
+    const response = await authFetch(
+      `/organisations/${selectedOrgId}/members/${userId}`,
+      { method: "DELETE" }
+    );
+    if (!response.ok) {
+      setError(await errorText(response));
+      return;
+    }
+    await openOrganisation(selectedOrgId);
+    await loadOrgs();
+  }
+
+  async function shareCase() {
+    if (!selectedId || !shareOrgId) return;
+    setError(null);
+    const response = await authFetch(`/cases/${selectedId}/share`, {
+      method: "POST",
+      body: JSON.stringify({ org_id: shareOrgId }),
+    });
+    if (!response.ok) {
+      setError(await errorText(response));
+      return;
+    }
+    setNotice("Matter shared with the organisation.");
+    await refreshCaseCollections(selectedId);
+  }
+
+  async function unshareCase() {
+    if (!selectedId) return;
+    setError(null);
+    const response = await authFetch(`/cases/${selectedId}/share`, {
+      method: "DELETE",
+    });
+    if (!response.ok) {
+      setError(await errorText(response));
+      return;
+    }
+    setNotice("Matter is no longer shared with an organisation.");
+    await refreshCaseCollections(selectedId);
+  }
+
   async function uploadDocument(event: React.FormEvent) {
     event.preventDefault();
     if (!selectedId || !file) return;
@@ -538,6 +940,97 @@ export default function Home() {
     } finally {
       setBusy(null);
     }
+  }
+
+  async function reviseDocument(id: string) {
+    setBusy(`revise-${id}`);
+    setError(null);
+    try {
+      const response = await authFetch(`/documents/${id}/revise`, {
+        method: "POST",
+        body: JSON.stringify({
+          verify: true,
+          jurisdiction: detail?.jurisdiction ?? "NSW Supreme Court",
+          fields: {
+            plaintiff: plaintiff || "Plaintiff",
+            defendant: defendant || "Defendant",
+            party_opening: partyOpening,
+            facts: lines(factsText),
+            causes_of_action: lines(causesText),
+            submissions: lines(factsText),
+            orders: relief || "Orders sought as set out above.",
+          },
+        }),
+      });
+      if (!response.ok) {
+        setError(await errorText(response));
+        return;
+      }
+      const revised = (await response.json()) as GeneratedDoc;
+      setActiveDoc(revised);
+      setNotice("Revision created; the previous version is superseded.");
+      if (selectedId) await refreshCaseCollections(selectedId);
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function signDocument(id: string) {
+    if (!signerName.trim()) {
+      setError("Enter the signer's full name first.");
+      return;
+    }
+    setBusy(`sign-${id}`);
+    setError(null);
+    try {
+      const response = await authFetch(`/documents/${id}/sign`, {
+        method: "POST",
+        body: JSON.stringify({ signer_name: signerName.trim() }),
+      });
+      if (!response.ok) {
+        setError(await errorText(response));
+        return;
+      }
+      setNotice("Document signed; the content hash is recorded.");
+      const refreshed = await authFetch(`/documents/${id}`);
+      if (refreshed.ok) setActiveDoc((await refreshed.json()) as GeneratedDoc);
+      if (selectedId) await refreshCaseCollections(selectedId);
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function checkConflicts(event: React.FormEvent) {
+    event.preventDefault();
+    if (!conflictName.trim()) return;
+    setError(null);
+    const response = await authFetch(
+      `/conflicts/check?name=${encodeURIComponent(conflictName.trim())}`
+    );
+    if (!response.ok) {
+      setError(await errorText(response));
+      return;
+    }
+    const body = (await response.json()) as { matches?: ConflictMatch[] };
+    setConflictMatches(body.matches ?? []);
+  }
+
+  async function addConflict() {
+    if (!selectedOrgId || !conflictName.trim()) return;
+    setError(null);
+    const response = await authFetch("/conflicts", {
+      method: "POST",
+      body: JSON.stringify({
+        org_id: selectedOrgId,
+        party_name: conflictName.trim(),
+      }),
+    });
+    if (!response.ok) {
+      setError(await errorText(response));
+      return;
+    }
+    setNotice("Added to the organisation's conflict register.");
+    await openOrganisation(selectedOrgId);
   }
 
   async function attestDocument(id: string) {
@@ -731,6 +1224,12 @@ export default function Home() {
               {me.subscription_tier ? ` · ${me.subscription_tier}` : ""}
             </span>
           )}
+          {me?.limits && me.usage && (
+            <span className="text-neutral-500">
+              Cases {me.usage.cases}/{me.limits.cases ?? "∞"} · Sims{" "}
+              {me.usage.simulations_this_month}/{me.limits.simulations_per_month ?? "∞"}
+            </span>
+          )}
           <button
             onClick={() => {
               abortRef.current?.abort();
@@ -817,6 +1316,23 @@ export default function Home() {
                 />
               </label>
               <label className="block text-xs">
+                Organisation (optional)
+                <select
+                  className="mt-1 w-full rounded border border-neutral-700 bg-neutral-900 p-2"
+                  value={newCaseOrgId}
+                  onChange={(event) => setNewCaseOrgId(event.target.value)}
+                >
+                  <option value="">Personal matter</option>
+                  {orgs
+                    .filter((org) => org.role !== "viewer")
+                    .map((org) => (
+                      <option key={org.id} value={org.id}>
+                        {org.name}
+                      </option>
+                    ))}
+                </select>
+              </label>
+              <label className="block text-xs">
                 Cause of action
                 <input
                   className="mt-1 w-full rounded border border-neutral-700 bg-neutral-900 p-2"
@@ -875,6 +1391,7 @@ export default function Home() {
                     <span>
                       {plan.label} · ${(plan.amount_cents / 100).toFixed(0)}
                       {plan.interval ? "/mo" : ""}
+                      {plan.limits ? ` · ${plan.limits.cases ?? "∞"} cases` : ""}
                     </span>
                     <button
                       onClick={() => void checkout(plan.id)}
@@ -888,6 +1405,156 @@ export default function Home() {
               </ul>
             </section>
           )}
+
+          <section className="rounded border border-neutral-800 p-3">
+            <h2 className="text-sm font-semibold">Organisations</h2>
+            <ul className="mt-2 space-y-1">
+              {orgs.map((org) => (
+                <li key={org.id}>
+                  <button
+                    onClick={() => void openOrganisation(org.id)}
+                    className={`w-full rounded px-2 py-1 text-left text-xs hover:bg-neutral-800 ${
+                      selectedOrgId === org.id ? "bg-neutral-800" : ""
+                    }`}
+                  >
+                    <span className="block font-medium">{org.name}</span>
+                    <span className="block text-neutral-500">
+                      {org.role} · {org.member_count} member(s)
+                    </span>
+                  </button>
+                </li>
+              ))}
+              {orgs.length === 0 && (
+                <li className="text-xs text-neutral-500">No organisations yet.</li>
+              )}
+            </ul>
+            <form onSubmit={createOrganisation} className="mt-2 flex gap-1">
+              <input
+                className="min-w-0 flex-1 rounded border border-neutral-700 bg-neutral-900 p-1 text-xs"
+                placeholder="New organisation"
+                value={orgName}
+                onChange={(event) => setOrgName(event.target.value)}
+              />
+              <button
+                type="submit"
+                disabled={busy === "org" || !orgName.trim()}
+                className="rounded bg-neutral-800 px-2 py-1 text-xs hover:bg-neutral-700 disabled:opacity-50"
+              >
+                Create
+              </button>
+            </form>
+            {orgDetail && selectedOrgId === orgDetail.id && (
+              <div className="mt-3 rounded bg-neutral-900 p-2 text-xs">
+                <p className="font-medium">{orgDetail.name}</p>
+                <ul className="mt-1 space-y-1">
+                  {orgDetail.members.map((member) => (
+                    <li
+                      key={member.user_id}
+                      className="flex items-center justify-between gap-2"
+                    >
+                      <span className="truncate">
+                        {member.email} · {member.role}
+                      </span>
+                      {member.role !== "owner" && (
+                        <button
+                          onClick={() => void removeMember(member.user_id)}
+                          className="text-red-400 hover:underline"
+                        >
+                          remove
+                        </button>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+                <form onSubmit={addMember} className="mt-2 space-y-1">
+                  <input
+                    type="email"
+                    placeholder="member email"
+                    className="w-full rounded border border-neutral-700 bg-neutral-950 p-1 text-xs"
+                    value={memberEmail}
+                    onChange={(event) => setMemberEmail(event.target.value)}
+                  />
+                  <div className="flex gap-1">
+                    <select
+                      className="flex-1 rounded border border-neutral-700 bg-neutral-950 p-1 text-xs"
+                      value={memberRole}
+                      onChange={(event) => setMemberRole(event.target.value)}
+                    >
+                      <option value="admin">admin</option>
+                      <option value="lawyer">lawyer</option>
+                      <option value="paralegal">paralegal</option>
+                      <option value="viewer">viewer</option>
+                    </select>
+                    <button
+                      type="submit"
+                      disabled={busy === "member" || !memberEmail.trim()}
+                      className="rounded bg-neutral-800 px-2 py-1 hover:bg-neutral-700 disabled:opacity-50"
+                    >
+                      Add
+                    </button>
+                  </div>
+                </form>
+                <form onSubmit={checkConflicts} className="mt-2 space-y-1">
+                  <input
+                    placeholder="Conflict-check name"
+                    className="w-full rounded border border-neutral-700 bg-neutral-950 p-1 text-xs"
+                    value={conflictName}
+                    onChange={(event) => setConflictName(event.target.value)}
+                  />
+                  <button
+                    type="submit"
+                    disabled={!conflictName.trim()}
+                    className="rounded bg-neutral-800 px-2 py-1 hover:bg-neutral-700 disabled:opacity-50"
+                  >
+                    Check conflicts
+                  </button>
+                </form>
+                {conflictMatches.length > 0 && (
+                  <div className="mt-1 space-y-1">
+                    {conflictMatches.map((match, index) => (
+                      <div
+                        key={`${match.source}-${match.party}-${index}`}
+                        className="rounded bg-neutral-950 p-1"
+                      >
+                        <span className="font-medium">{match.party}</span>{" "}
+                        <span className="text-neutral-500">
+                          {match.source === "case"
+                            ? match.title
+                            : match.matter_ref ?? "register entry"}
+                        </span>
+                      </div>
+                    ))}
+                    <button
+                      onClick={() => void addConflict()}
+                      className="rounded border border-amber-700 px-2 py-1 text-amber-300 hover:bg-amber-950"
+                    >
+                      Add name to register
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
+          </section>
+
+          <section className="rounded border border-neutral-800 p-3">
+            <h2 className="text-sm font-semibold">Data & privacy</h2>
+            <div className="mt-2 flex flex-wrap gap-2 text-xs">
+              <button
+                onClick={() => void exportMyData()}
+                disabled={busy === "export-data"}
+                className="rounded border border-neutral-700 px-2 py-1 hover:bg-neutral-800 disabled:opacity-50"
+              >
+                {busy === "export-data" ? "Exporting…" : "Export my data"}
+              </button>
+              <button
+                onClick={() => void eraseMyAccount()}
+                disabled={busy === "erase-account"}
+                className="rounded border border-red-800 px-2 py-1 text-red-300 hover:bg-red-950 disabled:opacity-50"
+              >
+                {busy === "erase-account" ? "Erasing…" : "Erase account data"}
+              </button>
+            </div>
+          </section>
         </aside>
 
         <section className="min-w-0">
@@ -954,6 +1621,115 @@ export default function Home() {
                   <section className="rounded border border-neutral-800 p-4 text-sm">
                     <h3 className="font-semibold">Relief sought</h3>
                     <p className="mt-1 text-neutral-300">{detail.relief_sought || "Not recorded."}</p>
+                  </section>
+                  {courtPolicy && (
+                    <section className="rounded border border-amber-900 bg-amber-950/20 p-4 text-xs">
+                      <h3 className="font-semibold text-amber-200">{courtPolicy.policy}</h3>
+                      <p className="mt-1 text-amber-100/80">{courtPolicy.notes}</p>
+                      <p className="mt-1 text-neutral-400">{courtPolicy.disclaimer}</p>
+                    </section>
+                  )}
+                  {resources.length > 0 &&
+                    /family|criminal|violence|assault|child|apprehended/i.test(
+                      `${detail.cause_of_action} ${detail.court ?? ""} ${detail.jurisdiction}`
+                    ) && (
+                      <section className="rounded border border-red-900 bg-red-950/20 p-4 text-xs">
+                        <h3 className="font-semibold text-red-200">
+                          Support if you are at risk
+                        </h3>
+                        <ul className="mt-1 space-y-1">
+                          {resources.map((resource) => (
+                            <li key={resource.name}>
+                              <span className="font-medium">{resource.name}</span>
+                              {resource.phone ? ` · ${resource.phone}` : ""}
+                              {resource.url ? (
+                                <>
+                                  {" · "}
+                                  <a
+                                    className="underline"
+                                    href={resource.url}
+                                    target="_blank"
+                                    rel="noreferrer"
+                                  >
+                                    website
+                                  </a>
+                                </>
+                              ) : null}
+                              <span className="text-neutral-400"> — {resource.when}</span>
+                            </li>
+                          ))}
+                        </ul>
+                        <p className="mt-1 text-neutral-400">
+                          If you are in immediate danger call 000.
+                        </p>
+                      </section>
+                    )}
+                  {elements.length > 0 && (
+                    <section className="rounded border border-neutral-800 p-4 text-sm">
+                      <h3 className="font-semibold">Elements to address</h3>
+                      <ul className="mt-1 list-disc pl-5 text-neutral-300">
+                        {elements.map((element, index) => (
+                          <li key={`${element}-${index}`}>{element}</li>
+                        ))}
+                      </ul>
+                    </section>
+                  )}
+                  <section className="rounded border border-neutral-800 p-4 text-sm">
+                    <h3 className="font-semibold">Organisation</h3>
+                    <p className="mt-1 text-neutral-300">
+                      {orgs.find((org) => org.id === detail.org_id)?.name ??
+                        "Personal matter"}
+                    </p>
+                    {detail.org_id ? (
+                      <button
+                        onClick={() => void unshareCase()}
+                        className="mt-2 rounded border border-neutral-700 px-2 py-1 text-xs hover:bg-neutral-800"
+                      >
+                        Stop sharing
+                      </button>
+                    ) : (
+                      <div className="mt-2 flex flex-wrap gap-2">
+                        <select
+                          className="min-w-0 flex-1 rounded border border-neutral-700 bg-neutral-900 p-1 text-xs"
+                          value={shareOrgId}
+                          onChange={(event) => setShareOrgId(event.target.value)}
+                        >
+                          <option value="">Select organisation</option>
+                          {orgs
+                            .filter((org) => org.role !== "viewer")
+                            .map((org) => (
+                              <option key={org.id} value={org.id}>
+                                {org.name}
+                              </option>
+                            ))}
+                        </select>
+                        <button
+                          onClick={() => void shareCase()}
+                          disabled={!shareOrgId}
+                          className="rounded bg-neutral-800 px-2 py-1 text-xs hover:bg-neutral-700 disabled:opacity-50"
+                        >
+                          Share matter
+                        </button>
+                      </div>
+                    )}
+                  </section>
+                  <section className="rounded border border-neutral-800 p-4 text-sm">
+                    <label className="flex items-center gap-2">
+                      <input
+                        type="checkbox"
+                        checked={detail.legal_hold ?? false}
+                        disabled={busy === "legal-hold"}
+                        onChange={(event) => void toggleLegalHold(event.target.checked)}
+                      />
+                      <span>
+                        Legal hold — blocks erasure and the 7-year retention sweep
+                      </span>
+                    </label>
+                    {detail.erased_at && (
+                      <p className="mt-1 text-xs text-amber-400">
+                        De-identified {detail.erased_at}
+                      </p>
+                    )}
                   </section>
                   <div className="grid grid-cols-2 gap-2 text-center md:grid-cols-4">
                     {[
@@ -1033,15 +1809,28 @@ export default function Home() {
                             {simulation.created_at ?? "—"} · {simulation.status} ·{" "}
                             {simulation.user_attestation ? "attested" : "not attested"}
                           </span>
-                          {!simulation.user_attestation && (
-                            <button
-                              onClick={() => void attestSimulation(simulation.id)}
-                              disabled={busy === `attest-sim-${simulation.id}`}
-                              className="rounded border border-emerald-700 px-2 py-1 text-emerald-300 hover:bg-emerald-950 disabled:opacity-50"
-                            >
-                              Attest (SC Gen 23)
-                            </button>
-                          )}
+                          <div className="flex flex-wrap gap-1">
+                            {!simulation.user_attestation && (
+                              <button
+                                onClick={() => void attestSimulation(simulation.id)}
+                                disabled={busy === `attest-sim-${simulation.id}`}
+                                className="rounded border border-emerald-700 px-2 py-1 text-emerald-300 hover:bg-emerald-950 disabled:opacity-50"
+                              >
+                                Attest (SC Gen 23)
+                              </button>
+                            )}
+                            {simulation.status === "completed" && (
+                              <button
+                                onClick={() => void analyseSimulation(simulation.id)}
+                                disabled={busy === `analysis-${simulation.id}`}
+                                className="rounded border border-sky-700 px-2 py-1 text-sky-300 hover:bg-sky-950 disabled:opacity-50"
+                              >
+                                {busy === `analysis-${simulation.id}`
+                                  ? "Analysing…"
+                                  : "Analyse weaknesses"}
+                              </button>
+                            )}
+                          </div>
                         </li>
                       ))}
                       {simulations.length === 0 && (
@@ -1052,6 +1841,120 @@ export default function Home() {
                       <p className="mt-2 text-xs text-neutral-500">Latest id: {simulationId}</p>
                     )}
                   </section>
+
+                  {analysis && (
+                    <section className="rounded border border-neutral-800 p-4">
+                      <h3 className="text-sm font-semibold">
+                        Weakness analysis
+                        {analysisFor ? ` · ${analysisFor.slice(0, 8)}` : ""}
+                      </h3>
+                      <p className="mt-1 whitespace-pre-wrap text-sm text-neutral-300">
+                        {analysis.summary}
+                      </p>
+                      <ul className="mt-3 space-y-2">
+                        {analysis.weaknesses.map((weakness, index) => (
+                          <li
+                            key={`${weakness.issue}-${index}`}
+                            className="rounded bg-neutral-900 p-2 text-xs"
+                          >
+                            <div className="flex flex-wrap items-center gap-2">
+                              <span
+                                className={
+                                  weakness.severity === "high"
+                                    ? "font-semibold text-red-400"
+                                    : weakness.severity === "medium"
+                                      ? "font-semibold text-amber-400"
+                                      : "font-semibold text-neutral-400"
+                                }
+                              >
+                                {weakness.severity.toUpperCase()}
+                              </span>
+                              <span className="font-medium">{weakness.issue}</span>
+                              <span className="text-neutral-500">({weakness.side})</span>
+                            </div>
+                            {weakness.why && <p className="mt-1">{weakness.why}</p>}
+                            {weakness.evidence_gap && (
+                              <p className="mt-1 text-amber-400">
+                                Evidence gap: {weakness.evidence_gap}
+                              </p>
+                            )}
+                            {weakness.next_step && (
+                              <p className="mt-1 text-neutral-400">
+                                Next step: {weakness.next_step}
+                              </p>
+                            )}
+                          </li>
+                        ))}
+                      </ul>
+                      {analysis.claims && analysis.claims.length > 0 && (
+                        <div className="mt-3">
+                          <h4 className="text-xs font-semibold">Claims</h4>
+                          <ul className="mt-1 space-y-1 text-xs">
+                            {analysis.claims.map((claim, index) => (
+                              <li
+                                key={`${claim.claim}-${index}`}
+                                className="rounded bg-neutral-900 p-2"
+                              >
+                                <span
+                                  className={
+                                    claim.support === "supported"
+                                      ? "font-semibold text-emerald-400"
+                                      : claim.support === "unsupported"
+                                        ? "font-semibold text-red-400"
+                                        : "font-semibold text-amber-400"
+                                  }
+                                >
+                                  {claim.support.toUpperCase()}
+                                </span>{" "}
+                                {claim.claim}
+                                {claim.source && (
+                                  <span className="text-neutral-500"> — {claim.source}</span>
+                                )}
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+                      {analysis.elements && analysis.elements.length > 0 && (
+                        <div className="mt-3">
+                          <h4 className="text-xs font-semibold">Element checklist</h4>
+                          <ul className="mt-1 space-y-1 text-xs">
+                            {analysis.elements.map((item, index) => (
+                              <li
+                                key={`${item.element}-${index}`}
+                                className="rounded bg-neutral-900 p-2"
+                              >
+                                <span
+                                  className={
+                                    item.status === "addressed"
+                                      ? "font-semibold text-emerald-400"
+                                      : item.status === "missing"
+                                        ? "font-semibold text-red-400"
+                                        : "font-semibold text-amber-400"
+                                  }
+                                >
+                                  {item.status.toUpperCase()}
+                                </span>{" "}
+                                {item.element}
+                                {item.note && (
+                                  <p className="mt-1 text-neutral-400">{item.note}</p>
+                                )}
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+                      {analysis.citation_risk && (
+                        <p className="mt-3 text-xs text-neutral-400">
+                          Citation risk: {Math.round(analysis.citation_risk.score * 100)}% ·{" "}
+                          {analysis.citation_risk.note}
+                        </p>
+                      )}
+                      <p className="mt-2 text-xs text-amber-400">
+                        {analysis.methodology_note}
+                      </p>
+                    </section>
+                  )}
                 </div>
               )}
 
@@ -1113,6 +2016,8 @@ export default function Home() {
                         <option value="written_submissions">Written submissions</option>
                         <option value="chronology">Chronology</option>
                         <option value="court_correspondence">Court correspondence</option>
+                        <option value="schedule_of_damages">Schedule of damages</option>
+                        <option value="list_of_documents">List of documents</option>
                       </select>
                     </label>
                     <div className="grid gap-2 md:grid-cols-2">
@@ -1169,14 +2074,37 @@ export default function Home() {
                   {activeDoc && (
                     <section className="rounded border border-neutral-800 p-4">
                       <div className="flex flex-wrap items-center justify-between gap-2">
-                        <h3 className="text-sm font-semibold">Draft {activeDoc.doc_type}</h3>
+                        <h3 className="text-sm font-semibold">
+                          Draft {activeDoc.doc_type} · v{activeDoc.version ?? 1}
+                          {activeDoc.superseded ? " · superseded" : ""}
+                        </h3>
                         <div className="flex flex-wrap gap-2">
+                          <button
+                            onClick={() => void reviseDocument(activeDoc.id)}
+                            disabled={busy === `revise-${activeDoc.id}`}
+                            className="rounded border border-sky-700 px-2 py-1 text-xs text-sky-300 hover:bg-sky-950 disabled:opacity-50"
+                          >
+                            Revise
+                          </button>
                           <button
                             onClick={() => void attestDocument(activeDoc.id)}
                             disabled={busy === `attest-doc-${activeDoc.id}`}
                             className="rounded border border-emerald-700 px-2 py-1 text-xs text-emerald-300 hover:bg-emerald-950 disabled:opacity-50"
                           >
                             Attest I reviewed it
+                          </button>
+                          <input
+                            placeholder="Signer full name"
+                            className="rounded border border-neutral-700 bg-neutral-900 px-2 py-1 text-xs"
+                            value={signerName}
+                            onChange={(event) => setSignerName(event.target.value)}
+                          />
+                          <button
+                            onClick={() => void signDocument(activeDoc.id)}
+                            disabled={!signerName.trim() || busy === `sign-${activeDoc.id}`}
+                            className="rounded border border-purple-700 px-2 py-1 text-xs text-purple-300 hover:bg-purple-950 disabled:opacity-50"
+                          >
+                            Sign
                           </button>
                           {(["txt", "docx", "pdf"] as const).map((format) => (
                             <button
@@ -1190,6 +2118,23 @@ export default function Home() {
                           ))}
                         </div>
                       </div>
+                      {activeDoc.signer_name && (
+                        <p className="mt-2 text-xs text-purple-300">
+                          Signed by {activeDoc.signer_name}
+                          {activeDoc.signed_at ? ` at ${activeDoc.signed_at}` : ""} · content
+                          hash {activeDoc.content_sha256?.slice(0, 12)}…
+                        </p>
+                      )}
+                      {docVersions.length > 1 && (
+                        <ul className="mt-2 space-y-1 text-xs text-neutral-400">
+                          {docVersions.map((version) => (
+                            <li key={version.id}>
+                              v{version.version} · {version.superseded ? "superseded" : "current"}
+                              {version.signer_name ? ` · signed by ${version.signer_name}` : ""}
+                            </li>
+                          ))}
+                        </ul>
+                      )}
                       {activeDoc.gates && (
                         <ul className="mt-2 grid gap-1 text-xs text-neutral-400 md:grid-cols-2">
                           <li>
@@ -1241,8 +2186,11 @@ export default function Home() {
                       {generated.map((doc) => (
                         <li key={doc.id} className="flex flex-wrap items-center justify-between gap-2 rounded bg-neutral-900 p-2 text-xs">
                           <span>
-                            {doc.doc_type} · {doc.exported ? "exported" : "not exported"} ·{" "}
+                            {doc.doc_type} · v{doc.version ?? 1}
+                            {doc.superseded ? " · superseded" : ""} ·{" "}
+                            {doc.exported ? "exported" : "not exported"} ·{" "}
                             {doc.user_reviewed ? "reviewed" : "not reviewed"}
+                            {doc.signer_name ? ` · signed (${doc.signer_name})` : ""}
                           </span>
                           <button
                             onClick={() => setActiveDoc(doc)}
@@ -1306,6 +2254,12 @@ export default function Home() {
                       <li className="text-xs text-neutral-500">No deadlines saved.</li>
                     )}
                   </ul>
+                  <button
+                    onClick={() => void downloadCalendar()}
+                    className="rounded border border-neutral-700 px-3 py-1 text-xs hover:bg-neutral-800"
+                  >
+                    Download calendar (.ics)
+                  </button>
 
                   <form onSubmit={computeLimitation} className="space-y-2 rounded border border-neutral-800 p-4">
                     <h3 className="text-sm font-semibold">Limitation period (NSW)</h3>

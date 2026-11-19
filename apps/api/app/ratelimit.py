@@ -51,6 +51,8 @@ async def consume_redis(key: str, limit: int, window: int) -> tuple[bool, int]:
 
 
 async def check(request: Request, name: str, limit: int, window: int) -> None:
+    if not get_settings().rate_limit_enabled:
+        return
     # Client IP, not user id: auth happens later in get_db, and the limit must
     # still protect unauthenticated/forged-token traffic.
     ip = request.client.host if request.client else "unknown"

@@ -47,6 +47,7 @@ class BedrockProvider:
             model=self.model or "",
             prompt_tokens=usage.get("inputTokens"),
             completion_tokens=usage.get("outputTokens"),
+            digest=self.model,
         )
 
     # COMPLIANCE_NOTE (3.3 / APP 8) — the Converse calls above rely on the

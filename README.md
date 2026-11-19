@@ -14,14 +14,18 @@ court-ready documents with verified citations.
 ## Current status
 
 **Working end-to-end on localhost** — auth, case intake, document upload and
-text extraction, a case-grounded 9-turn debate, simulation attestation,
-document generation, DOCX/PDF/TXT export, deadlines and limitation periods, and
-Stripe checkout/webhooks (test-mode when keys are configured).
+text extraction, retrieval-backed 9-turn debate, weakness/claim/element analysis
+with a citation-risk score, simulation attestation, document generation,
+DOCX/PDF/TXT export, deadlines/limitation periods, calendar export, plan quotas,
+organisations/RBAC and matter sharing, legal registry (elements + court AI
+policies), document versioning and typed-name signatures, conflict checks,
+support/referral resources, legal hold, data export/de-identification, metrics,
+and Stripe checkout/webhooks (test-mode when keys are configured).
 
-77 tests green (4 CORS tests skip when the API is not running), including the
-seven compliance gates: RLS tenant isolation, export gate, banned-doc-type hard
-block, disclosure footer, audit trail, citation-source deny-list, and debate
-protocol order. Remaining Phase-2 work is tracked in
+94 tests green (4 CORS tests run only when the API is live), including the seven
+compliance gates: RLS tenant isolation, export gate, banned-doc-type hard block,
+disclosure footer, audit trail, citation-source deny-list, and debate protocol
+order. Remaining Phase-2 work is tracked in
 [requirement/PENDING.md](requirement/PENDING.md).
 
 ## What it does
@@ -30,11 +34,16 @@ protocol order. Remaining Phase-2 work is tracked in
 |---|---------|-------|
 | 1 | Auth + multi-tenancy — GoTrue JWTs, Postgres RLS, fail-closed token verification, least-privilege app role | `apps/api/app/db.py`, `app/routers/cases.py` |
 | 2 | Case intake + document upload — facts, parties, issues, relief, court/file number; PDF/DOCX/TXT/MD/CSV extraction | `app/routers/features.py`, `app/documents/storage.py` |
-| 3 | **Case-grounded 9-turn debate** — intake facts + extracted uploads + transcript memory + optional interventions, streamed over SSE, calibrated-range verdict | `app/agents/engine.py`, `GET /cases/{id}/simulate` |
+| 3 | **Retrieval-backed 9-turn debate** — intake facts, Postgres full-text retrieval over uploaded chunks, transcript memory, optional interventions, streamed over SSE, validated calibrated-range verdict | `app/agents/engine.py`, `app/documents/retrieval.py` |
 | 4 | **Document generator + citation verification** — 5 SC Gen 23-allowed types, FRL/NSW-Caselaw lookup with provenance, AustLII hard-denied, three-layer export gate, DOCX/PDF export | `app/citations/`, `app/documents/`, `app/routers/features.py` |
-| 5 | **Deadline + limitation calculator** — AU court business days, computed Easter/state holidays, persisted deadlines, NSW limitation periods | `app/deadlines/` |
-| 6 | Billing — real Stripe Checkout Session creation + webhook signature verification; 503 when unconfigured | `app/billing.py`, `POST /billing/*` |
-| 7 | Operations — request ids, body-size cap, Redis rate limiting, `/health/db` RLS posture, per-turn audit durability | `app/middleware.py`, `app/ratelimit.py` |
+| 5 | **Weakness analysis** — post-debate structured analysis (issue, severity, evidence gap, next step) + citation-risk score derived from verified/unverified/flagged citations | `POST /simulations/{id}/analysis` |
+| 6 | **Deadline + limitation calculator** — AU court business days, computed Easter/state holidays, persisted deadlines, NSW limitation periods, `.ics` export, email reminders | `app/deadlines/`, `worker/main.py` |
+| 7 | **Plans and privacy** — per-tier case/simulation quotas, Stripe checkout/webhooks, legal hold, JSON data export, de-identification erasure, 7-year retention sweep, consent records | `app/entitlements.py`, `app/privacy.py`, `app/billing.py` |
+| 8 | **Organisations/RBAC** — owner/admin/lawyer/paralegal/viewer memberships, matter sharing, RLS-enforced org visibility/write rules | `app/organisations.py`, migration 0005 |
+| 9 | **Legal registry** — cause-of-action element checklists and court AI-policy pointers (SC Gen 23, GPN-AI, generic verify) | `app/legal_registry.py` |
+| 10 | **Document versions + signatures** — version groups, supersession, content hashes, typed-name signature bound to the hash; export records version/hash/signer headers | migration 0006, `app/routers/features.py` |
+| 11 | **Conflict checks + support resources** — party-name search across visible matters and the org register; AU crisis/legal-aid referral list | `app/routers/conflicts.py`, `app/resources.py` |
+| 12 | Operations — request ids, body-size cap, Redis rate limiting, `/health/db` RLS posture, `/metrics`, optional Sentry, per-turn audit durability, prompt/model provenance | `app/middleware.py`, `app/ratelimit.py`, `app/metrics.py` |
 
 ## Architecture (one page)
 
@@ -100,7 +109,7 @@ after API edits: `docker compose -f infra/docker-compose.yml up -d --build api`.
 
 ```bash
 cd apps/api
-uv run pytest -q                                     # 77 passed (4 skip without a live API)
+uv run pytest -q                                     # 94 passed (4 skip without a live API)
 uv run pytest -m compliance                          # SC Gen 23 / RLS / audit / deny-list
 uv run pytest -q --cov=app --cov-fail-under=80       # CI gate
 uv run ruff check . && uv run mypy app               # CI gates
@@ -125,9 +134,16 @@ cd ../web && npx tsc --noEmit && npm run build       # CI web job
 - **APP 8 / LPP**: v1 inference stays on this machine (Ollama); the audit trail
   stores verbatim prompts/responses for reconstruction; Phase 2 moves to
   Bedrock Sydney with account-level opt-out asserted before real data.
-- **Least privilege**: app transactions bind `lexsim_app` (NOBYPASSRLS), not the
-  superuser connection. `/health/db` reports the effective role and whether RLS
-  is actually enforced.
+- **Least privilege**: containers connect as the `lexsim_api` login role and
+  every transaction binds `lexsim_app` (NOBYPASSRLS). `/health/db` reports the
+  connection role, effective role and whether RLS is actually enforced.
+- **Organisation isolation**: RLS extends case visibility to org members and
+  restricts writes to writer roles; `SECURITY DEFINER` helpers avoid recursive
+  membership policies.
+- **Privacy**: legal hold blocks erasure/retention; `GET /users/me/export`
+  returns portable matter data; erasure de-identifies case content and deletes
+  uploads while retaining append-only audit records for LPP/legal obligations.
+  The GoTrue identity is deleted separately via the auth admin API.
 
 ## Documentation
 
@@ -140,3 +156,7 @@ cd ../web && npx tsc --noEmit && npm run build       # CI web job
 | [requirement/PENDING.md](requirement/PENDING.md) | tracked remaining work |
 | [requirement/examples/](requirement/examples/) | 4 worked example cases |
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | current topology (supersedes the requirement diagram) |
+| [SECURITY.md](SECURITY.md) | security model, limitations, disclosure |
+| [docs/PRIVACY_POLICY.md](docs/PRIVACY_POLICY.md) / [docs/TERMS_OF_USE.md](docs/TERMS_OF_USE.md) | draft policies (legal review required) |
+| [docs/DATA_FLOWS.md](docs/DATA_FLOWS.md) / [docs/BREACH_RESPONSE.md](docs/BREACH_RESPONSE.md) | APP 8 register and OAIC runbook |
+| [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) | production checklist and rollback |

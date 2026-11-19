@@ -30,10 +30,13 @@ from collections.abc import Awaitable, Callable
 from sqlalchemy import text
 
 from app.agents.debate_state_machine import DebateState, Turn
-from app.agents.prompts import SYSTEM_PROMPTS, verdict_from_text
+from app.agents.prompts import PROMPT_VERSION, SYSTEM_PROMPTS, verdict_from_text
 from app.audit import write_audit_row
 from app.db import arm_request
+from app.documents.retrieval import retrieve_chunks
+from app.legal_registry import elements_for
 from app.llm.base import LLMRequest
+from app.metrics import observe_llm
 from app.llm.presets import options_for, seed_for
 
 TurnHook = Callable[[dict], Awaitable[None]]
@@ -87,6 +90,9 @@ async def case_context(db, case_id: str) -> str:
         f"Court/jurisdiction: {row['court'] or row['jurisdiction']}.",
         f"Cause of action: {row['cause_of_action']}.",
     ]
+    registry = elements_for(row["cause_of_action"] or "")
+    if registry["elements"]:
+        parts.append("Elements to address: " + "; ".join(registry["elements"]) + ".")
     if row["case_number"]:
         parts.append(f"Court file number: {row['case_number']}.")
     if row["description"]:
@@ -95,33 +101,37 @@ async def case_context(db, case_id: str) -> str:
         parts.append(f"Parties: {_json(row['parties'])}")
     if row["issues"]:
         issues = row["issues"]
-        rendered = "; ".join(str(i) for i in issues) if isinstance(issues, list) else str(issues)
-        parts.append(f"Issues to determine: {rendered}")
+        issue_text = "; ".join(str(i) for i in issues) if isinstance(issues, list) else str(issues)
+        parts.append(f"Issues to determine: {issue_text}")
     if row["relief_sought"]:
         parts.append(f"Relief sought: {row['relief_sought']}")
 
-    docs = (
-        await db.execute(
-            text(
-                "SELECT original_filename, extracted_text FROM public.documents"
-                " WHERE case_id = :c AND extracted_text IS NOT NULL"
-                " ORDER BY uploaded_at DESC LIMIT 5"
-            ),
-            {"c": case_id},
-        )
-    ).mappings().all()
-    if docs:
-        chunks: list[str] = []
-        budget = 8000
-        for doc in docs:
-            extracted = (doc["extracted_text"] or "").strip()
-            if not extracted or budget <= 0:
+    # Retrieval: rank the case's own upload chunks against its issues/cause, with
+    # an earliest-chunks fallback. This replaces dumping the first N characters
+    # of every upload, which buried the relevant passage in long exhibits.
+    query = " ".join(
+        [
+            str(row["cause_of_action"] or ""),
+            row["title"] or "",
+            " ".join(str(i) for i in (row["issues"] or []) if i),
+        ]
+    )
+    chunks = await retrieve_chunks(db, case_id=case_id, query=query, limit=6)
+    if chunks:
+        passages: list[str] = []
+        budget = 6000
+        for chunk in chunks:
+            content = (chunk.get("content") or "").strip()
+            if not content or budget <= 0:
                 continue
-            take = extracted[:budget]
-            chunks.append(f"--- {doc['original_filename'] or 'document'} ---\n{take}")
+            take = content[:budget]
+            source = chunk.get("original_filename") or "document"
+            passages.append(
+                f"--- {source} (chunk {chunk.get('chunk_index', 0)}) ---\n{take}"
+            )
             budget -= len(take)
-        if chunks:
-            parts.append("Uploaded materials (extracted text):\n" + "\n\n".join(chunks))
+        if passages:
+            parts.append("Relevant uploaded passages:\n" + "\n\n".join(passages))
 
     return "\n\n".join(parts)
 
@@ -180,6 +190,7 @@ async def run_debate(
                 seed=seed_for(turn.role),  # JUDGE only — runtime pitfall §4
             )
         )
+        observe_llm(resp.model, resp.prompt_tokens, resp.completion_tokens)
         executed = state.advance(resp.text)  # G6: linear cursor, no out-of-order
         payload = {
             "turn": executed.index,
@@ -203,6 +214,8 @@ async def run_debate(
             response_text=resp.text,  # verbatim output
             prompt_sha=_sha(prompt_text),
             response_sha=_sha(resp.text),
+            prompt_version=PROMPT_VERSION,
+            model_digest=getattr(resp, "digest", None),
         )
         # C1/G5 durability: one committed audit pair per turn. If the client
         # disconnects or turn N fails, turns 1..N-1 remain reconstructable.

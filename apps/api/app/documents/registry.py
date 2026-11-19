@@ -14,6 +14,8 @@ class DocType(StrEnum):
     WRITTEN_SUBMISSIONS = "written_submissions"
     CHRONOLOGY = "chronology"
     COURT_CORRESPONDENCE = "court_correspondence"
+    SCHEDULE_OF_DAMAGES = "schedule_of_damages"
+    LIST_OF_DOCUMENTS = "list_of_documents"
 
 
 PROHIBITED_DOC_TYPES = frozenset(

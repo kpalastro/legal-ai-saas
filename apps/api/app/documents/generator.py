@@ -48,6 +48,16 @@ _TEMPLATES: dict[str, str] = {
     "court_correspondence": (
         "To: {{ recipient }}\nFrom: {{ sender }}\nDate: {{ today }}\nRe: {{ matter }}\n\n{{ body }}\n\nYours faithfully,\n{{ sender }}"
     ),
+    "schedule_of_damages": (
+        "IN THE {{ jurisdiction|upper }}\n\nBETWEEN:\n\n{{ plaintiff }} (Plaintiff)\n\nAND:\n\n{{ defendant }} (Defendant)\n\n"
+        "SCHEDULE OF DAMAGES\n\nPrepared: {{ today }}\n\n"
+        "{% for item in items %}{{ loop.index }}. {{ item.description }} — {{ item.amount }}\n{% endfor %}\n"
+        "Total claimed: {{ total }}\n"
+    ),
+    "list_of_documents": (
+        "LIST OF DOCUMENTS\n\nCourt: {{ jurisdiction|upper }}\nMatter: {{ matter }}\nPrepared: {{ today }}\n\n"
+        "{% for doc in documents %}{{ doc.date }} — {{ doc.description }}{% if doc.party %} ({{ doc.party }}){% endif %}\n{% endfor %}"
+    ),
 }
 
 

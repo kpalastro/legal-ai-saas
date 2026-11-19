@@ -11,9 +11,10 @@ Design rules:
 
 from __future__ import annotations
 
+import hashlib
 import json
 import logging
-from datetime import date
+from datetime import UTC, date, datetime
 
 from fastapi import (
     APIRouter,
@@ -42,6 +43,9 @@ from app.config import get_settings
 from app.db import SessionFactory, get_db
 from app.deadlines import compute_deadline, compute_limitation
 from app.deadlines.service import disclaimer
+from app.entitlements import limits_dict, limits_for, usage_for
+from app.organisations import require_case_writer
+from app.documents.chunking import chunk_text
 from app.documents.exporters import export_bytes
 from app.documents.generator import render_document
 from app.documents.registry import require_allowed_doc_type
@@ -51,6 +55,10 @@ from app.ratelimit import rate_limit
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
+
+
+def _sha256(value: str) -> str:
+    return hashlib.sha256(value.encode()).hexdigest()
 
 
 def _finding_dict(finding: CitationFinding) -> dict:
@@ -117,6 +125,7 @@ async def upload_document(
 ) -> dict:
     if not await _case_exists(db, case_id):
         raise HTTPException(status_code=404, detail="case not found")
+    await require_case_writer(db, case_id)
 
     settings = get_settings()
     content = await file.read(settings.max_upload_bytes + 1)
@@ -163,6 +172,20 @@ async def upload_document(
     ).mappings().first()
     if row is None:  # INSERT ... RETURNING must yield a row
         raise HTTPException(status_code=500, detail="upload record was not created")
+
+    # Index the extracted text for retrieval. Without this the debate can only
+    # see the first few thousand characters of an exhibit.
+    chunks = chunk_text(extracted)
+    for index, chunk in enumerate(chunks):
+        await db.execute(
+            text(
+                "INSERT INTO public.document_chunks"
+                " (document_id, case_id, chunk_index, content)"
+                " VALUES (:d, :c, :i, :t)"
+            ),
+            {"d": str(row["id"]), "c": case_id, "i": index, "t": chunk},
+        )
+
     await db.commit()
     return {
         "id": str(row["id"]),
@@ -172,6 +195,7 @@ async def upload_document(
         "size_bytes": saved["size_bytes"],
         "sha256": saved["sha256"],
         "extracted_chars": len(extracted),
+        "chunk_count": len(chunks),
         "extraction_error": extraction_error,
         "uploaded_at": row["uploaded_at"].isoformat() if row["uploaded_at"] else None,
     }
@@ -244,6 +268,7 @@ async def generate_document(
     doc_type = require_allowed_doc_type(body.doc_type)  # G3: 422 on prohibited
     if not await _case_exists(db, body.case_id):
         raise HTTPException(status_code=404, detail="case not found (or not yours)")
+    await require_case_writer(db, body.case_id)
 
     cite_rows: list[dict] = []
     if body.verify:
@@ -268,8 +293,8 @@ async def generate_document(
         text(
             """INSERT INTO public.generated_documents
                  (case_id, simulation_id, doc_type, content, citations,
-                  user_reviewed, exported, export_blocked_reason)
-               VALUES (:c, :s, :t, :ct, CAST(:cv AS jsonb), false, false, :reason)
+                  user_reviewed, exported, export_blocked_reason, content_sha256)
+               VALUES (:c, :s, :t, :ct, CAST(:cv AS jsonb), false, false, :reason, :sha)
                RETURNING id"""
         ),
         {
@@ -281,13 +306,26 @@ async def generate_document(
             "reason": None
             if export_ready
             else "citations/attestation/review gates not all satisfied (SC Gen 23 para 17)",
+            "sha": _sha256(content),
         },
     )
     doc_id = r.scalar_one()
+    # The version group is the first document in the chain; set it after insert
+    # because a self-referential default is not possible in the INSERT.
+    await db.execute(
+        text(
+            "UPDATE public.generated_documents SET version_group_id = id"
+            " WHERE id = :id"
+        ),
+        {"id": str(doc_id)},
+    )
     await db.commit()
     return {
         "id": str(doc_id),
         "doc_type": doc_type.value,
+        "version": 1,
+        "superseded": False,
+        "content_sha256": _sha256(content),
         "content": content,
         "citations": cite_rows,
         "simulation_id": str(linked["id"]) if linked else None,
@@ -305,6 +343,241 @@ async def generate_document(
     }
 
 
+class ReviseBody(BaseModel):
+    fields: dict
+    verify: bool = True
+    jurisdiction: str | None = None
+
+
+@router.post(
+    "/documents/{doc_id}/revise",
+    dependencies=[Depends(rate_limit("generate", 30, 60))],
+)
+async def revise_document(
+    doc_id: str, body: ReviseBody, db: AsyncSession = Depends(get_db)
+) -> dict:
+    old = (
+        await db.execute(
+            text(
+                "SELECT id, case_id, simulation_id, doc_type, version,"
+                " version_group_id FROM public.generated_documents WHERE id = :id"
+            ),
+            {"id": doc_id},
+        )
+    ).mappings().first()
+    if old is None:
+        raise HTTPException(status_code=404, detail="document not found")
+    await require_case_writer(db, str(old["case_id"]))
+    doc_type = require_allowed_doc_type(old["doc_type"])
+
+    cite_rows: list[dict] = []
+    if body.verify:
+        text_blob = "\n".join(
+            str(v) for v in body.fields.values() if isinstance(v, (str, list, dict))
+        )
+        cite_rows = [_finding_dict(f) for f in await verify_citations(text_blob)]
+    jurisdiction = body.jurisdiction or (
+        await db.execute(
+            text(
+                "SELECT COALESCE(court, jurisdiction) FROM public.cases WHERE id = :c"
+            ),
+            {"c": str(old["case_id"])},
+        )
+    ).scalar_one_or_none() or "NSW Supreme Court"
+    content = render_document(
+        doc_type.value, jurisdiction, body.fields, citations=cite_rows
+    )
+    linked = await _simulation_for_case(
+        db,
+        str(old["simulation_id"]) if old["simulation_id"] else None,
+        str(old["case_id"]),
+    )
+    citations_verified = bool(cite_rows) and all(
+        c["status"] == "verified" for c in cite_rows
+    )
+    export_ready = citations_verified and linked is not None and bool(
+        linked.get("user_attestation")
+    )
+    new_version = int(old["version"]) + 1
+    group = str(old["version_group_id"] or old["id"])
+
+    new_id = (
+        await db.execute(
+            text(
+                """INSERT INTO public.generated_documents
+                     (case_id, simulation_id, doc_type, content, citations,
+                      user_reviewed, exported, export_blocked_reason, version,
+                      version_group_id, supersedes_id, content_sha256)
+                   VALUES (:c, :s, :t, :ct, CAST(:cv AS jsonb), false, false, :reason,
+                           :v, :g, :old, :sha)
+                   RETURNING id"""
+            ),
+            {
+                "c": str(old["case_id"]),
+                "s": str(linked["id"]) if linked else None,
+                "t": doc_type.value,
+                "ct": content,
+                "cv": json.dumps(cite_rows),
+                "reason": None
+                if export_ready
+                else "citations/attestation/review gates not all satisfied (SC Gen 23 para 17)",
+                "v": new_version,
+                "g": group,
+                "old": str(old["id"]),
+                "sha": _sha256(content),
+            },
+        )
+    ).scalar_one()
+    await db.execute(
+        text(
+            "UPDATE public.generated_documents SET superseded = true WHERE id = :id"
+        ),
+        {"id": str(old["id"])},
+    )
+    await db.commit()
+    return {
+        "id": str(new_id),
+        "doc_type": doc_type.value,
+        "version": new_version,
+        "supersedes_id": str(old["id"]),
+        "content": content,
+        "citations": cite_rows,
+        "simulation_id": str(linked["id"]) if linked else None,
+        "export_ready": export_ready,
+        "content_sha256": _sha256(content),
+        "gates": {
+            "citations_all_verified": citations_verified,
+            "simulation_linked": linked is not None,
+            "simulation_attested": bool(linked and linked.get("user_attestation")),
+            "user_reviewed": False,
+        },
+    }
+
+
+@router.get("/documents/{doc_id}/versions")
+async def document_versions(doc_id: str, db: AsyncSession = Depends(get_db)) -> list[dict]:
+    group = (
+        await db.execute(
+            text(
+                "SELECT version_group_id FROM public.generated_documents WHERE id = :id"
+            ),
+            {"id": doc_id},
+        )
+    ).scalar_one_or_none()
+    if group is None:
+        raise HTTPException(status_code=404, detail="document not found")
+    rows = (
+        await db.execute(
+            text(
+                """SELECT g.id, g.version, g.superseded, g.content_sha256,
+                          g.user_reviewed, g.exported, g.created_at,
+                          (SELECT s.signer_name FROM public.signatures s
+                            WHERE s.document_id = g.id) AS signer_name
+                   FROM public.generated_documents g
+                   WHERE g.version_group_id = :g ORDER BY g.version"""
+            ),
+            {"g": str(group)},
+        )
+    ).mappings().all()
+    return [
+        {
+            **{k: r[k] for k in ("version", "superseded", "content_sha256", "user_reviewed", "exported", "signer_name")},
+            "id": str(r["id"]),
+            "created_at": r["created_at"].isoformat() if r["created_at"] else None,
+        }
+        for r in rows
+    ]
+
+
+class SignBody(BaseModel):
+    signer_name: str = Field(min_length=2, max_length=200)
+
+
+async def _caller_sub(db: AsyncSession) -> str:
+    sub = (
+        await db.execute(
+            text("SELECT current_setting('request.jwt.claims', true)::jsonb ->> 'sub'")
+        )
+    ).scalar_one_or_none()
+    if not sub:
+        raise HTTPException(status_code=401, detail="no verified identity on the session")
+    return str(sub)
+
+
+@router.post("/documents/{doc_id}/sign")
+async def sign_document(
+    doc_id: str, body: SignBody, db: AsyncSession = Depends(get_db)
+) -> dict:
+    row = (
+        await db.execute(
+            text(
+                "SELECT case_id, content, content_sha256, user_reviewed, superseded"
+                " FROM public.generated_documents WHERE id = :id"
+            ),
+            {"id": doc_id},
+        )
+    ).mappings().first()
+    if row is None:
+        raise HTTPException(status_code=404, detail="document not found")
+    await require_case_writer(db, str(row["case_id"]))
+    if row["superseded"]:
+        raise HTTPException(status_code=409, detail="cannot sign a superseded version")
+    if not row["user_reviewed"]:
+        raise HTTPException(
+            status_code=409,
+            detail="review and attest the document before signing",
+        )
+    content_hash = row["content_sha256"] or _sha256(row["content"])
+    signature = (
+        await db.execute(
+            text(
+                "INSERT INTO public.signatures"
+                " (document_id, user_id, signer_name, content_sha256)"
+                " VALUES (:d, :u, :n, :h)"
+                " ON CONFLICT (document_id) DO NOTHING"
+                " RETURNING id, signed_at"
+            ),
+            {
+                "d": doc_id,
+                "u": await _caller_sub(db),
+                "n": body.signer_name.strip(),
+                "h": content_hash,
+            },
+        )
+    ).mappings().first()
+    if signature is None:
+        raise HTTPException(status_code=409, detail="document already signed")
+    await db.commit()
+    return {
+        "id": str(signature["id"]),
+        "document_id": doc_id,
+        "signer_name": body.signer_name.strip(),
+        "content_sha256": content_hash,
+        "signed_at": signature["signed_at"].isoformat(),
+    }
+
+
+@router.get("/documents/{doc_id}/signature")
+async def get_signature(doc_id: str, db: AsyncSession = Depends(get_db)) -> dict:
+    row = (
+        await db.execute(
+            text(
+                "SELECT id, document_id, signer_name, content_sha256, signed_at"
+                " FROM public.signatures WHERE document_id = :d"
+            ),
+            {"d": doc_id},
+        )
+    ).mappings().first()
+    if row is None:
+        raise HTTPException(status_code=404, detail="document is not signed")
+    return {
+        **dict(row),
+        "id": str(row["id"]),
+        "document_id": str(row["document_id"]),
+        "signed_at": row["signed_at"].isoformat() if row["signed_at"] else None,
+    }
+
+
 @router.get("/cases/{case_id}/generated-documents")
 async def list_generated_documents(
     case_id: str, db: AsyncSession = Depends(get_db)
@@ -312,9 +585,15 @@ async def list_generated_documents(
     rows = (
         await db.execute(
             text(
-                "SELECT id, doc_type, citations, user_reviewed, exported,"
-                " export_blocked_reason, created_at FROM public.generated_documents"
-                " WHERE case_id = :c ORDER BY created_at DESC"
+                """SELECT g.id, g.doc_type, g.version, g.superseded, g.citations,
+                          g.user_reviewed, g.exported, g.export_blocked_reason,
+                          g.content_sha256, g.created_at,
+                          (SELECT s.signer_name FROM public.signatures s
+                            WHERE s.document_id = g.id) AS signer_name,
+                          (SELECT s.signed_at FROM public.signatures s
+                            WHERE s.document_id = g.id) AS signed_at
+                   FROM public.generated_documents g
+                   WHERE g.case_id = :c ORDER BY g.created_at DESC"""
             ),
             {"c": case_id},
         )
@@ -324,6 +603,7 @@ async def list_generated_documents(
             **dict(r),
             "id": str(r["id"]),
             "created_at": r["created_at"].isoformat() if r["created_at"] else None,
+            "signed_at": r["signed_at"].isoformat() if r["signed_at"] else None,
         }
         for r in rows
     ]
@@ -334,9 +614,15 @@ async def get_generated_document(doc_id: str, db: AsyncSession = Depends(get_db)
     row = (
         await db.execute(
             text(
-                "SELECT id, case_id, simulation_id, doc_type, content, citations,"
-                " user_reviewed, exported, export_blocked_reason, created_at"
-                " FROM public.generated_documents WHERE id = :id"
+                """SELECT g.id, g.case_id, g.simulation_id, g.doc_type, g.content,
+                          g.citations, g.user_reviewed, g.exported,
+                          g.export_blocked_reason, g.version, g.superseded,
+                          g.content_sha256, g.created_at,
+                          (SELECT s.signer_name FROM public.signatures s
+                            WHERE s.document_id = g.id) AS signer_name,
+                          (SELECT s.signed_at FROM public.signatures s
+                            WHERE s.document_id = g.id) AS signed_at
+                   FROM public.generated_documents g WHERE g.id = :id"""
             ),
             {"id": doc_id},
         )
@@ -349,6 +635,7 @@ async def get_generated_document(doc_id: str, db: AsyncSession = Depends(get_db)
         "case_id": str(row["case_id"]),
         "simulation_id": str(row["simulation_id"]) if row["simulation_id"] else None,
         "created_at": row["created_at"].isoformat() if row["created_at"] else None,
+        "signed_at": row["signed_at"].isoformat() if row["signed_at"] else None,
     }
 
 
@@ -365,7 +652,7 @@ async def attest_document(
     current = (
         await db.execute(
             text(
-                "SELECT citations, exported, simulation_id"
+                "SELECT case_id, citations, exported, simulation_id, superseded"
                 " FROM public.generated_documents WHERE id = :id"
             ),
             {"id": doc_id},
@@ -373,6 +660,11 @@ async def attest_document(
     ).mappings().first()
     if current is None:
         raise HTTPException(status_code=404, detail="document not found")
+    await require_case_writer(db, str(current["case_id"]))
+    if current["superseded"]:
+        raise HTTPException(
+            status_code=409, detail="cannot attest a superseded version — revise the current one"
+        )
     if current["exported"]:
         raise HTTPException(status_code=409, detail="document already exported")
     if current["simulation_id"] is None:
@@ -416,7 +708,8 @@ async def export_document(
         await db.execute(
             text(
                 """SELECT id, case_id, simulation_id, doc_type, content, citations,
-                          user_reviewed, exported
+                          user_reviewed, exported, superseded, version,
+                          content_sha256
                    FROM public.generated_documents WHERE id = :id"""
             ),
             {"id": doc_id},
@@ -424,6 +717,11 @@ async def export_document(
     ).mappings().first()
     if row is None:
         raise HTTPException(status_code=404, detail="document not found")
+    await require_case_writer(db, str(row["case_id"]))
+    if row["superseded"]:
+        raise HTTPException(
+            status_code=409, detail="superseded version — export the current version"
+        )
     if row["exported"]:
         raise HTTPException(status_code=409, detail="document already exported")
 
@@ -471,15 +769,27 @@ async def export_document(
         {"id": doc_id},
     )
     await db.commit()
+    signature = (
+        await db.execute(
+            text(
+                "SELECT signer_name, signed_at FROM public.signatures"
+                " WHERE document_id = :d"
+            ),
+            {"d": str(row["id"])},
+        )
+    ).mappings().first()
+    content_hash = row["content_sha256"] or _sha256(row["content"])
     filename = f"{row['doc_type']}-{str(row['id'])[:8]}.{format}"
-    return Response(
-        content=payload,
-        media_type=media_type,
-        headers={
-            "Content-Disposition": f'attachment; filename="{filename}"',
-            "X-Document-Id": str(row["id"]),
-        },
-    )
+    headers = {
+        "Content-Disposition": f'attachment; filename="{filename}"',
+        "X-Document-Id": str(row["id"]),
+        "X-Document-Version": str(row["version"]),
+        "X-Content-SHA256": content_hash,
+    }
+    if signature:
+        headers["X-Document-Signer"] = signature["signer_name"]
+        headers["X-Document-Signed-At"] = signature["signed_at"].isoformat()
+    return Response(content=payload, media_type=media_type, headers=headers)
 
 
 # ---------- Feature 4c: citations ----------
@@ -522,6 +832,7 @@ async def store_deadline(
 ) -> dict:
     if not await _case_exists(db, case_id):
         raise HTTPException(status_code=404, detail="case not found")
+    await require_case_writer(db, case_id)
     result = compute_deadline(body.doc_type, body.jurisdiction, body.served_on)
     if result is None:
         raise HTTPException(
@@ -550,6 +861,54 @@ async def store_deadline(
         "reminder_sent": row["reminder_sent"],
         "disclaimer": disclaimer(),
     }
+
+
+def _ics_escape(value: str) -> str:
+    return (
+        str(value)
+        .replace("\\", "\\\\")
+        .replace(";", "\\;")
+        .replace(",", "\\,")
+        .replace("\n", "\\n")
+    )
+
+
+@router.get("/cases/{case_id}/deadlines.ics")
+async def deadlines_ics(case_id: str, db: AsyncSession = Depends(get_db)) -> Response:
+    rows = (
+        await db.execute(
+            text(
+                "SELECT id, trigger_doc_type, due_date FROM public.deadlines"
+                " WHERE case_id = :c ORDER BY due_date"
+            ),
+            {"c": case_id},
+        )
+    ).mappings().all()
+    stamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
+    lines = [
+        "BEGIN:VCALENDAR",
+        "VERSION:2.0",
+        "PRODID:-//LexSim AI//Deadlines//EN",
+        "CALSCALE:GREGORIAN",
+    ]
+    for row in rows:
+        lines.extend(
+            [
+                "BEGIN:VEVENT",
+                f"UID:{row['id']}@lexsim",
+                f"DTSTAMP:{stamp}",
+                f"DTSTART;VALUE=DATE:{row['due_date'].strftime('%Y%m%d')}",
+                f"SUMMARY:{_ics_escape('Due: ' + row['trigger_doc_type'])}",
+                "DESCRIPTION:LexSim preparation deadline — verify against the court rules.",
+                "END:VEVENT",
+            ]
+        )
+    lines.append("END:VCALENDAR")
+    return Response(
+        content="\r\n".join(lines) + "\r\n",
+        media_type="text/calendar; charset=utf-8",
+        headers={"Content-Disposition": 'attachment; filename="lexsim-deadlines.ics"'},
+    )
 
 
 @router.get("/cases/{case_id}/deadlines")
@@ -602,7 +961,7 @@ async def me(db: AsyncSession = Depends(get_db)) -> dict:
     row = (
         await db.execute(
             text(
-                "SELECT id, email, role, subscription_tier, created_at"
+                "SELECT id, email, role, subscription_tier, created_at, erased_at"
                 " FROM public.users"
                 " WHERE id = (current_setting('request.jwt.claims', true)::jsonb ->> 'sub')::uuid"
             )
@@ -610,10 +969,14 @@ async def me(db: AsyncSession = Depends(get_db)) -> dict:
     ).mappings().first()
     if row is None:
         raise HTTPException(status_code=404, detail="user not found")
+    limits = limits_for(row["subscription_tier"])
     return {
         **dict(row),
         "id": str(row["id"]),
         "created_at": row["created_at"].isoformat() if row["created_at"] else None,
+        "erased_at": row["erased_at"].isoformat() if row["erased_at"] else None,
+        "limits": limits_dict(limits),
+        "usage": await usage_for(db, str(row["id"])),
     }
 
 
@@ -633,6 +996,7 @@ async def plans() -> list[dict]:
             "amount_cents": p.amount_cents,
             "currency": p.currency,
             "interval": p.interval,
+            "limits": limits_dict(limits_for(p.id)),
         }
         for p in PLANS.values()
     ]

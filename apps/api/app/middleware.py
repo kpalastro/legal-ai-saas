@@ -9,6 +9,8 @@ import uuid
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import JSONResponse
 
+from app.metrics import observe_http
+
 MAX_BODY_BYTES = 26 * 1024 * 1024  # upload cap is 20 MB; leave multipart overhead
 
 logger = logging.getLogger("lexsim.request")
@@ -33,6 +35,7 @@ class RequestContextMiddleware(BaseHTTPMiddleware):
 
         started = time.perf_counter()
         response = await call_next(request)
+        observe_http(request.method, request.url.path, response.status_code)
         elapsed_ms = (time.perf_counter() - started) * 1000
         response.headers["X-Request-ID"] = request_id
         response.headers["X-Process-Time-Ms"] = f"{elapsed_ms:.1f}"

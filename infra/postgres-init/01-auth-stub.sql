@@ -42,8 +42,9 @@ END;
 $$;
 
 -- 02b (appended by deploy): app role — migration 0001 issues policies FOR lexsim_app,
--- so the role must exist before alembic runs. NOLOGIN (app connects as postgres in
--- dev; prod uses a dedicated connection role via Supabase).
+-- so the role must exist before alembic runs. NOLOGIN: the app connects through
+-- the dedicated lexsim_api login role below, then SET LOCAL ROLE lexsim_app so
+-- RLS binds even if a misconfigured connection is privileged.
 DO $do$
 BEGIN
   IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'lexsim_app') THEN
@@ -51,3 +52,15 @@ BEGIN
   END IF;
 END
 $do$;
+
+-- Dev-only login role used by the api/worker containers. Migrations still run as
+-- postgres/owner. Never deploy this credential; production uses a managed role.
+DO $do$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'lexsim_api') THEN
+    CREATE ROLE lexsim_api LOGIN PASSWORD 'lexsim_api_dev';
+  END IF;
+END
+$do$;
+GRANT lexsim_app TO lexsim_api;
+GRANT CONNECT ON DATABASE lexsim TO lexsim_api;

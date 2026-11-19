@@ -8,7 +8,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, PlainTextResponse
 from sqlalchemy.exc import DataError
 
 from app.config import get_settings
@@ -16,10 +16,23 @@ from app.llm import get_provider
 from app.middleware import RequestContextMiddleware
 from app.routers.cases import router as cases_router
 from app.routers.cases import simulations_router
+from app.routers.conflicts import router as conflicts_router
+from app.routers.legal import router as legal_router
+from app.routers.organisations import router as organisations_router
+from app.routers.privacy import router as privacy_router
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    settings = get_settings()
+    if settings.sentry_dsn:
+        import sentry_sdk
+
+        sentry_sdk.init(
+            dsn=settings.sentry_dsn,
+            traces_sample_rate=0.1,
+            send_default_pii=False,
+        )
     provider = get_provider()
     app.state.llm = provider
     warmed = False
@@ -48,10 +61,7 @@ async def data_error_handler(request: Request, exc: DataError) -> JSONResponse:
 # "TypeError: Failed to fetch" (the UI error screenshot of 31 Aug).
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:3000",
-        "http://127.0.0.1:3000",
-    ],
+    allow_origins=get_settings().cors_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -62,6 +72,10 @@ app.add_middleware(RequestContextMiddleware)
 
 app.include_router(cases_router)
 app.include_router(simulations_router)
+app.include_router(privacy_router)
+app.include_router(organisations_router)
+app.include_router(legal_router)
+app.include_router(conflicts_router)
 
 # Feature 4/5/6 routers: documents + citations verification, deadline calculator,
 # billing scaffold (Stripe test-mode). All inherit fail-closed JWT auth via get_db.
@@ -86,6 +100,13 @@ async def health_llm() -> dict:
         "warm": warm,
         "ready": warm,
     }
+
+
+@app.get("/metrics", response_class=PlainTextResponse)
+async def metrics() -> str:
+    from app.metrics import render
+
+    return render()
 
 
 @app.get("/health/db")

@@ -39,7 +39,19 @@ class OllamaProvider:
         s = get_settings()
         self.base_url = (base_url or s.ollama_base_url).rstrip("/")
         self.model = model or s.llm_model
+        self.digest: str | None = None  # immutable model identity for audit
         self._client = httpx.AsyncClient(base_url=self.base_url, timeout=httpx.Timeout(180.0))
+
+    async def _refresh_digest(self) -> None:
+        try:
+            tags = (await self._client.get("/api/tags")).json().get("models", [])
+        except httpx.HTTPError:
+            return
+        base = self.model.split(":")[0]
+        for entry in tags:
+            if entry.get("name", "").split(":")[0] == base:
+                self.digest = entry.get("digest")
+                return
 
     async def health(self) -> bool:
         """Fail-fast readiness (S4.1): daemon reachable AND the model warm this boot
@@ -49,6 +61,8 @@ class OllamaProvider:
             ps = (await self._client.get("/api/ps")).json().get("models", [])
         except httpx.HTTPError:
             return False
+        if getattr(self, "digest", None) is None:
+            await self._refresh_digest()
         return any(m["name"].split(":")[0] == self.model.split(":")[0] for m in ps)
 
     async def warmup(self) -> None:
@@ -65,6 +79,7 @@ class OllamaProvider:
                 "options": {"num_predict": 1, "num_ctx": 512},
             },
         )
+        await self._refresh_digest()
 
     async def complete(self, req: LLMRequest) -> LLMResponse:
         """One chat turn. options carry the 32 GB RAM ceiling + sampler pins; JUDGE
@@ -92,4 +107,5 @@ class OllamaProvider:
             model=self.model,
             prompt_tokens=data.get("prompt_eval_count"),
             completion_tokens=data.get("eval_count"),
+            digest=getattr(self, "digest", None),
         )

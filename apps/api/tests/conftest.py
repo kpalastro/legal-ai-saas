@@ -14,3 +14,6 @@ os.environ.setdefault(
 )
 # Keep test uploads out of the repo and out of the dev demo's storage dir.
 os.environ.setdefault("STORAGE_DIR", "/tmp/lexsim-test-storage")
+# Rate-limit keys persist in Redis between runs; disable the edge limiter so a
+# prior run cannot turn a later test into a 429. The limiter is unit-tested.
+os.environ.setdefault("RATE_LIMIT_ENABLED", "false")

@@ -30,6 +30,9 @@ class LLMResponse:
     # Same shape for both providers — the audit_parity() contract below.
     prompt_tokens: int | None
     completion_tokens: int | None
+    # Immutable model identity (Ollama digest / Bedrock model ID) for
+    # reproducibility; `model` alone is a mutable tag like `qwen3.5:latest`.
+    digest: str | None = None
 
 
 class LLMProvider(Protocol):
