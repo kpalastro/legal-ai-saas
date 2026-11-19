@@ -102,15 +102,32 @@ type ElementCheck = {
   note?: string;
 };
 
+type Settlement = {
+  range?: string;
+  factors?: string[];
+  cost_risks?: string[];
+};
+
 type WeaknessReport = {
   summary: string;
   weaknesses: Weakness[];
   claims?: Claim[];
   elements?: ElementCheck[];
+  settlement?: Settlement;
   note?: string;
   methodology_note?: string;
   parse_error?: boolean;
   citation_risk?: { score: number; note: string; checked: number };
+};
+
+type DocumentComment = {
+  id: string;
+  user_id: string;
+  email: string;
+  body: string;
+  resolved: boolean;
+  resolved_at?: string | null;
+  created_at?: string | null;
 };
 
 type Resource = {
@@ -286,6 +303,9 @@ export default function Home() {
   const [elements, setElements] = useState<string[]>([]);
   const [resources, setResources] = useState<Resource[]>([]);
   const [docVersions, setDocVersions] = useState<GeneratedDoc[]>([]);
+  const [docDiff, setDocDiff] = useState<string | null>(null);
+  const [comments, setComments] = useState<DocumentComment[]>([]);
+  const [commentBody, setCommentBody] = useState("");
   const [signerName, setSignerName] = useState("");
   const [conflictName, setConflictName] = useState("");
   const [conflictMatches, setConflictMatches] = useState<ConflictMatch[]>([]);
@@ -476,9 +496,18 @@ export default function Home() {
       setDocVersions([]);
       return;
     }
+    setDocDiff(null);
     void (async () => {
-      const response = await authFetch(`/documents/${activeDoc.id}/versions`);
-      if (response.ok) setDocVersions((await response.json()) as GeneratedDoc[]);
+      const [versionsResponse, commentsResponse] = await Promise.all([
+        authFetch(`/documents/${activeDoc.id}/versions`),
+        authFetch(`/documents/${activeDoc.id}/comments`),
+      ]);
+      if (versionsResponse.ok) {
+        setDocVersions((await versionsResponse.json()) as GeneratedDoc[]);
+      }
+      if (commentsResponse.ok) {
+        setComments((await commentsResponse.json()) as DocumentComment[]);
+      }
     })();
   }, [activeDoc, authFetch]);
 
@@ -1033,6 +1062,62 @@ export default function Home() {
     await openOrganisation(selectedOrgId);
   }
 
+  async function showDiff() {
+    if (!activeDoc) return;
+    setError(null);
+    const response = await authFetch(`/documents/${activeDoc.id}/diff`);
+    if (!response.ok) {
+      setError(await errorText(response));
+      return;
+    }
+    const body = (await response.json()) as { diff?: string };
+    setDocDiff(body.diff || "(no textual changes)");
+  }
+
+  async function loadComments(docId: string) {
+    const response = await authFetch(`/documents/${docId}/comments`);
+    if (response.ok) setComments((await response.json()) as DocumentComment[]);
+  }
+
+  async function addComment(event: React.FormEvent) {
+    event.preventDefault();
+    if (!activeDoc || !commentBody.trim()) return;
+    setError(null);
+    const response = await authFetch(`/documents/${activeDoc.id}/comments`, {
+      method: "POST",
+      body: JSON.stringify({ body: commentBody.trim() }),
+    });
+    if (!response.ok) {
+      setError(await errorText(response));
+      return;
+    }
+    setCommentBody("");
+    await loadComments(activeDoc.id);
+  }
+
+  async function resolveComment(id: string, resolved: boolean) {
+    if (!activeDoc) return;
+    const response = await authFetch(`/comments/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify({ resolved }),
+    });
+    if (!response.ok) {
+      setError(await errorText(response));
+      return;
+    }
+    await loadComments(activeDoc.id);
+  }
+
+  async function deleteComment(id: string) {
+    if (!activeDoc) return;
+    const response = await authFetch(`/comments/${id}`, { method: "DELETE" });
+    if (!response.ok) {
+      setError(await errorText(response));
+      return;
+    }
+    await loadComments(activeDoc.id);
+  }
+
   async function attestDocument(id: string) {
     setBusy(`attest-doc-${id}`);
     try {
@@ -1144,7 +1229,7 @@ export default function Home() {
   // ===== auth screen =====
   if (!auth) {
     return (
-      <main className="min-h-screen p-6 md:p-12 max-w-2xl mx-auto">
+      <main id="main" className="min-h-screen p-6 md:p-12 max-w-2xl mx-auto">
         <h1 className="text-2xl font-bold mb-1">LexSim AI</h1>
         <p className="text-sm text-neutral-400 mb-6">
           Multi-agent legal debate simulation · simulation and preparation only — not legal advice.
@@ -1209,7 +1294,7 @@ export default function Home() {
 
   // ===== workspace =====
   return (
-    <main className="min-h-screen">
+    <main id="main" className="min-h-screen">
       <header className="border-b border-neutral-800 px-4 py-3 flex flex-wrap items-center justify-between gap-2">
         <div>
           <h1 className="text-lg font-bold">LexSim AI</h1>
@@ -1243,7 +1328,7 @@ export default function Home() {
       </header>
 
       {(error || notice) && (
-        <div className="px-4 py-2 text-sm" aria-live="polite">
+        <div className="px-4 py-2 text-sm" role="status" aria-live="polite">
           {error && <p className="text-red-400">{error}</p>}
           {notice && <p className="text-emerald-400">{notice}</p>}
         </div>
@@ -1578,6 +1663,7 @@ export default function Home() {
                     <button
                       key={name}
                       onClick={() => setTab(name)}
+                      aria-current={tab === name ? "page" : undefined}
                       className={`rounded px-3 py-1 text-xs capitalize ${
                         tab === name ? "bg-blue-600" : "bg-neutral-800 hover:bg-neutral-700"
                       }`}
@@ -1944,6 +2030,30 @@ export default function Home() {
                           </ul>
                         </div>
                       )}
+                      {analysis.settlement &&
+                        (analysis.settlement.range ||
+                          (analysis.settlement.factors?.length ?? 0) > 0 ||
+                          (analysis.settlement.cost_risks?.length ?? 0) > 0) && (
+                          <div className="mt-3 text-xs">
+                            <h4 className="font-semibold">Settlement / costs</h4>
+                            {analysis.settlement.range && (
+                              <p className="mt-1 text-neutral-300">
+                                Indicative range: {analysis.settlement.range}
+                              </p>
+                            )}
+                            {(analysis.settlement.factors?.length ?? 0) > 0 && (
+                              <p className="mt-1">
+                                Factors: {analysis.settlement.factors?.join("; ")}
+                              </p>
+                            )}
+                            {(analysis.settlement.cost_risks?.length ?? 0) > 0 && (
+                              <p className="mt-1 text-amber-400">
+                                Cost/procedural risks:{" "}
+                                {analysis.settlement.cost_risks?.join("; ")}
+                              </p>
+                            )}
+                          </div>
+                        )}
                       {analysis.citation_risk && (
                         <p className="mt-3 text-xs text-neutral-400">
                           Citation risk: {Math.round(analysis.citation_risk.score * 100)}% ·{" "}
@@ -2087,6 +2197,12 @@ export default function Home() {
                             Revise
                           </button>
                           <button
+                            onClick={() => void showDiff()}
+                            className="rounded border border-neutral-700 px-2 py-1 text-xs hover:bg-neutral-800"
+                          >
+                            Compare
+                          </button>
+                          <button
                             onClick={() => void attestDocument(activeDoc.id)}
                             disabled={busy === `attest-doc-${activeDoc.id}`}
                             className="rounded border border-emerald-700 px-2 py-1 text-xs text-emerald-300 hover:bg-emerald-950 disabled:opacity-50"
@@ -2124,6 +2240,11 @@ export default function Home() {
                           {activeDoc.signed_at ? ` at ${activeDoc.signed_at}` : ""} · content
                           hash {activeDoc.content_sha256?.slice(0, 12)}…
                         </p>
+                      )}
+                      {docDiff && (
+                        <pre className="mt-2 max-h-60 overflow-auto whitespace-pre-wrap rounded bg-neutral-950 p-3 text-xs text-neutral-300">
+                          {docDiff}
+                        </pre>
                       )}
                       {docVersions.length > 1 && (
                         <ul className="mt-2 space-y-1 text-xs text-neutral-400">
@@ -2177,6 +2298,62 @@ export default function Home() {
                           ))}
                         </ul>
                       )}
+                      <section className="mt-3 border-t border-neutral-800 pt-3 text-xs">
+                        <h4 className="font-semibold">Review comments</h4>
+                        <ul className="mt-1 space-y-1">
+                          {comments.map((comment) => (
+                            <li
+                              key={comment.id}
+                              className={`rounded p-2 ${
+                                comment.resolved
+                                  ? "bg-neutral-950 text-neutral-500"
+                                  : "bg-neutral-900"
+                              }`}
+                            >
+                              <div className="flex flex-wrap items-center justify-between gap-2">
+                                <span>
+                                  {comment.email} · {comment.created_at ?? ""}
+                                </span>
+                                <span className="flex gap-2">
+                                  <button
+                                    onClick={() =>
+                                      void resolveComment(comment.id, !comment.resolved)
+                                    }
+                                    className="underline"
+                                  >
+                                    {comment.resolved ? "reopen" : "resolve"}
+                                  </button>
+                                  <button
+                                    onClick={() => void deleteComment(comment.id)}
+                                    className="text-red-400 underline"
+                                  >
+                                    delete
+                                  </button>
+                                </span>
+                              </div>
+                              <p className="mt-1 whitespace-pre-wrap">{comment.body}</p>
+                            </li>
+                          ))}
+                          {comments.length === 0 && (
+                            <li className="text-neutral-500">No comments yet.</li>
+                          )}
+                        </ul>
+                        <form onSubmit={addComment} className="mt-2 flex gap-1">
+                          <input
+                            className="min-w-0 flex-1 rounded border border-neutral-700 bg-neutral-950 p-1"
+                            placeholder="Add a review note"
+                            value={commentBody}
+                            onChange={(event) => setCommentBody(event.target.value)}
+                          />
+                          <button
+                            type="submit"
+                            disabled={!commentBody.trim()}
+                            className="rounded bg-neutral-800 px-2 py-1 hover:bg-neutral-700 disabled:opacity-50"
+                          >
+                            Comment
+                          </button>
+                        </form>
+                      </section>
                     </section>
                   )}
 

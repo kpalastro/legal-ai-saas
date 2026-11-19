@@ -11,6 +11,7 @@ Design rules:
 
 from __future__ import annotations
 
+import difflib
 import hashlib
 import json
 import logging
@@ -487,6 +488,65 @@ async def document_versions(doc_id: str, db: AsyncSession = Depends(get_db)) -> 
         }
         for r in rows
     ]
+
+
+@router.get("/documents/{doc_id}/diff")
+async def document_diff(
+    doc_id: str,
+    against: str | None = None,
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    current = (
+        await db.execute(
+            text(
+                "SELECT id, case_id, content, version, supersedes_id, version_group_id"
+                " FROM public.generated_documents WHERE id = :id"
+            ),
+            {"id": doc_id},
+        )
+    ).mappings().first()
+    if current is None:
+        raise HTTPException(status_code=404, detail="document not found")
+    other_id = against or (
+        str(current["supersedes_id"]) if current["supersedes_id"] else None
+    )
+    if other_id is None:
+        raise HTTPException(
+            status_code=422, detail="no previous version — pass ?against=<document_id>"
+        )
+    other = (
+        await db.execute(
+            text(
+                "SELECT id, case_id, content, version, version_group_id"
+                " FROM public.generated_documents WHERE id = :id"
+            ),
+            {"id": other_id},
+        )
+    ).mappings().first()
+    if other is None:
+        raise HTTPException(status_code=404, detail="comparison document not found")
+    if str(other["case_id"]) != str(current["case_id"]) or str(
+        other["version_group_id"]
+    ) != str(current["version_group_id"]):
+        raise HTTPException(
+            status_code=422, detail="documents are not versions of the same draft"
+        )
+    diff = list(
+        difflib.unified_diff(
+            other["content"].splitlines(),
+            current["content"].splitlines(),
+            fromfile=f"v{other['version']}",
+            tofile=f"v{current['version']}",
+            lineterm="",
+        )
+    )
+    return {
+        "from_id": str(other["id"]),
+        "to_id": str(current["id"]),
+        "from_version": other["version"],
+        "to_version": current["version"],
+        "diff": "\n".join(diff),
+    }
 
 
 class SignBody(BaseModel):

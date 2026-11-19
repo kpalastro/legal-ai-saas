@@ -142,6 +142,12 @@ requirement/  design + compliance records; docs/ holds current architecture diag
 - `app/resources.py` + `GET /legal/resources` expose AU crisis/legal-aid referrals. The UI shows them for family/criminal/violence-type matters; verify the numbers before publication.
 - `POST /users/me/erase` calls the optional GoTrue admin delete when `GOTRUE_ADMIN_URL` + `GOTRUE_SERVICE_ROLE_KEY` are set; otherwise it reports `identity_deleted=false`.
 
+### Review comments, diff and settlement analysis
+
+- `document_comments` supports threaded review notes with resolve/reopen and delete (author or case writer). RLS follows the document's case visibility; inserts require `case_writable`.
+- `GET /documents/{id}/diff` returns a unified diff against the previous version (or `?against=`), and only within the same version group.
+- The post-debate analysis also returns a model-generated `settlement` block (`range`, `factors`, `cost_risks`); validate it as preparation assistance, not a valuation.
+
 ### Legal registry and metrics
 
 - `app/legal_registry.py` is a deliberately conservative pointer: cause-of-action element checklists and court AI-policy entries (SC Gen 23, Federal Court GPN-AI, FCFCOA, generic verify). It is not legal advice; every response carries the disclaimer. `case_context()` appends the elements checklist, and the analysis prompt asks for `claims` and `elements`.
@@ -182,7 +188,7 @@ Citations are verified deterministically against the Federal Register of Legisla
 
 ### Data model
 
-Tenant tables: `cases`, `documents`, `simulations`, `generated_documents`, `deadlines`, `audit_log`, `audit_content`, plus `document_chunks` (retrieval, RLS through its case), `organisations`, `memberships`, `consents`, `signatures` and `conflicts`. Child tables join visibility through `cases`; `audit_content` holds verbatim prompts/responses and is backend-only (no tenant read policy). `public.users` references `auth.users(id)`; there is no `clerk_user_id` anywhere and a regression test enforces that. Migrations 0003–0006 add intake/document/attestation columns, indexes, retrieval chunks, provenance, privacy fields, organisations/RBAC, consents, document versions/signatures and the conflict register.
+Tenant tables: `cases`, `documents`, `simulations`, `generated_documents`, `deadlines`, `audit_log`, `audit_content`, plus `document_chunks` (retrieval), `organisations`, `memberships`, `consents`, `signatures`, `conflicts` and `document_comments`. Child tables join visibility through `cases`; `audit_content` holds verbatim prompts/responses and is backend-only (no tenant read policy). `public.users` references `auth.users(id)`; there is no `clerk_user_id` anywhere and a regression test enforces that. Migrations 0003–0006 add intake/document/attestation columns, indexes, retrieval chunks, provenance, privacy fields, organisations/RBAC, consents, document versions/signatures and the conflict register.
 
 Dev supplies an `auth` schema stub (`infra/postgres-init/01-auth-stub.sql`) with `auth.uid()` and `auth.role()` handling plural and singular claim GUCs. Never deploy the stub; production uses hosted Supabase Auth.
 
@@ -214,6 +220,9 @@ Dev supplies an `auth` schema stub (`infra/postgres-init/01-auth-stub.sql`) with
 - **Conflict matches are not clearance.** The register/search only surfaces name matches; a human resolves conflicts. Do not change the response to imply “no conflict”.
 - **Referral resources need verification.** Phone numbers/URLs in `app/resources.py` are a safety surface and can change; check before publication.
 - **Sentry is optional and off by default.** `SENTRY_DSN` unset = no external error egress; `send_default_pii=False` is deliberate.
+- **Subscription cancellation needs metadata.** Stripe does not carry `client_reference_id` on `customer.subscription.*`; checkout writes `subscription_data[metadata][user_id]`/`[plan]`, and the deletion event downgrades to free.
+- **Comments/diff follow document visibility.** Comments use the document's case; diff refuses documents from another version group or case. Do not widen either without a policy review.
+- **Settlement ranges are model output.** They are not valuations or advice; keep the disclaimer and never present them as a guaranteed outcome.
 - **Tests share one event loop** (`asyncio_default_fixture_loop_scope` / `asyncio_default_test_loop_scope = "session"`). The app's module-global asyncpg pool otherwise hands a connection bound to a dead loop to the next test.
 - **Test data must not leak into demos.** Use `[TEST]` names and purge fixtures before and after (TEST_PLAN §9; `test_audit_append_only.py` is the reference). Do not assert SQL errors where the doctrine requires asserting visibility-and-effect; always include the fail-closed zero-row case.
 - **Never assert on LLM prose.** Only structure: turn order, verdict schema `{lower, point, upper}`, citation status enums, footer presence, DB row shapes.

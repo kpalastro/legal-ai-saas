@@ -71,6 +71,15 @@ async def create_checkout_session(
     }
     if plan.interval:
         data["line_items[0][price_data][recurring][interval]"] = plan.interval
+        # Subscription lifecycle events need the user/plan in metadata; Stripe
+        # does not carry client_reference_id on customer.subscription.*.
+        data["subscription_data[metadata][plan]"] = plan.id
+        data["subscription_data[metadata][user_id]"] = user_id
+        if settings.stripe_trial_days > 0:
+            data["subscription_data[trial_period_days]"] = str(settings.stripe_trial_days)
+    if settings.stripe_automatic_tax:
+        data["automatic_tax[enabled]"] = "true"
+        data["tax_id_collection[enabled]"] = "true"
     if email:
         data["customer_email"] = email
 
@@ -128,13 +137,25 @@ def verify_webhook(payload: bytes, signature_header: str | None) -> dict:
         raise WebhookError("invalid webhook JSON") from None
 
 
-def entitlement_from_event(event: dict) -> tuple[str, str] | None:
-    """Return (user_id, plan_id) for a completed checkout, else None."""
-    if event.get("type") != "checkout.session.completed":
-        return None
-    session = event.get("data", {}).get("object", {})
-    user_id = session.get("client_reference_id")
-    plan_id = (session.get("metadata") or {}).get("plan")
-    if not user_id or plan_id not in PLANS:
-        return None
-    return str(user_id), str(plan_id)
+def entitlement_from_event(event: dict) -> tuple[str, str | None] | None:
+    """Return (user_id, plan_id|None) for a checkout or cancellation.
+
+    `plan_id=None` means the paid entitlement ended and the user falls back to
+    the free tier.
+    """
+    event_type = event.get("type")
+    obj = event.get("data", {}).get("object", {})
+    if event_type == "checkout.session.completed":
+        user_id = obj.get("client_reference_id")
+        plan_id = (obj.get("metadata") or {}).get("plan")
+        if not user_id or plan_id not in PLANS:
+            return None
+        return str(user_id), str(plan_id)
+    if event_type == "customer.subscription.deleted":
+        metadata = obj.get("metadata") or {}
+        user_id = metadata.get("user_id")
+        plan_id = metadata.get("plan")
+        if not user_id or plan_id not in PLANS:
+            return None
+        return str(user_id), None
+    return None

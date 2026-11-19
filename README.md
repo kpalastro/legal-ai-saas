@@ -18,9 +18,10 @@ text extraction, retrieval-backed 9-turn debate, weakness/claim/element analysis
 with a citation-risk score, simulation attestation, document generation,
 DOCX/PDF/TXT export, deadlines/limitation periods, calendar export, plan quotas,
 organisations/RBAC and matter sharing, legal registry (elements + court AI
-policies), document versioning and typed-name signatures, conflict checks,
-support/referral resources, legal hold, data export/de-identification, metrics,
-and Stripe checkout/webhooks (test-mode when keys are configured).
+policies), document versioning, typed-name signatures, review comments, version
+diff, settlement/cost analysis, conflict checks, support/referral resources,
+legal hold, data export/de-identification, metrics, and Stripe checkout/webhooks
+with subscription cancellation (test-mode when keys are configured).
 
 94 tests green (4 CORS tests run only when the API is live), including the seven
 compliance gates: RLS tenant isolation, export gate, banned-doc-type hard block,
@@ -43,7 +44,8 @@ order. Remaining Phase-2 work is tracked in
 | 9 | **Legal registry** — cause-of-action element checklists and court AI-policy pointers (SC Gen 23, GPN-AI, generic verify) | `app/legal_registry.py` |
 | 10 | **Document versions + signatures** — version groups, supersession, content hashes, typed-name signature bound to the hash; export records version/hash/signer headers | migration 0006, `app/routers/features.py` |
 | 11 | **Conflict checks + support resources** — party-name search across visible matters and the org register; AU crisis/legal-aid referral list | `app/routers/conflicts.py`, `app/resources.py` |
-| 12 | Operations — request ids, body-size cap, Redis rate limiting, `/health/db` RLS posture, `/metrics`, optional Sentry, per-turn audit durability, prompt/model provenance | `app/middleware.py`, `app/ratelimit.py`, `app/metrics.py` |
+| 12 | **Review workflow** — document comments/resolve, unified version diff, settlement/cost analysis from the debate | `app/routers/comments.py`, `GET /documents/{id}/diff` |
+| 13 | Operations — request ids, body-size cap, Redis rate limiting, `/health/db` RLS posture, `/metrics`, optional Sentry, per-turn audit durability, prompt/model provenance, subscription cancellation downgrade | `app/middleware.py`, `app/ratelimit.py`, `app/metrics.py`, `app/billing.py` |
 
 ## Architecture (one page)
 

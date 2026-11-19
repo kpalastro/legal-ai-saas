@@ -5,3 +5,15 @@ body {
   color: #e5e7eb;
   font-family: ui-sans-serif, system-ui, -apple-system, sans-serif;
 }
+
+:focus-visible {
+  outline: 2px solid #60a5fa;
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}

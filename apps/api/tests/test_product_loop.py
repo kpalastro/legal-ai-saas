@@ -396,6 +396,34 @@ async def test_document_revision_supersedes_and_exports(api, user, case, monkeyp
     assert new_doc["version"] == 2
     assert new_doc["supersedes_id"] == original["id"]
 
+    diff = await api.get(
+        f"/documents/{new_doc['id']}/diff", headers=user["headers"]
+    )
+    assert diff.status_code == 200, diff.text
+    assert "Revised submission" in diff.json()["diff"]
+    assert diff.json()["to_version"] == 2
+
+    comment = await api.post(
+        f"/documents/{new_doc['id']}/comments",
+        headers=user["headers"],
+        json={"body": "Check the prayer for relief."},
+    )
+    assert comment.status_code == 201, comment.text
+    comments = await api.get(
+        f"/documents/{new_doc['id']}/comments", headers=user["headers"]
+    )
+    assert len(comments.json()) == 1
+    resolved = await api.patch(
+        f"/comments/{comment.json()['id']}",
+        headers=user["headers"],
+        json={"resolved": True},
+    )
+    assert resolved.status_code == 200 and resolved.json()["resolved"] is True
+    deleted = await api.delete(
+        f"/comments/{comment.json()['id']}", headers=user["headers"]
+    )
+    assert deleted.status_code == 200
+
     old = await api.get(f"/documents/{original['id']}", headers=user["headers"])
     assert old.json()["superseded"] is True
     blocked = await api.get(
@@ -561,6 +589,37 @@ async def test_billing_webhook_verifies_signature_and_grants_tier(
     me = await api.get("/users/me", headers=user["headers"])
     assert me.json()["subscription_tier"] == "lawyer_monthly_10"
 
+    cancellation = json.dumps(
+        {
+            "type": "customer.subscription.deleted",
+            "data": {
+                "object": {
+                    "metadata": {
+                        "user_id": user["id"],
+                        "plan": "lawyer_monthly_10",
+                    }
+                }
+            },
+        }
+    ).encode()
+    cancel_ts = int(time.time())
+    cancel_sig = hmac.new(
+        b"whsec_test_secret", f"{cancel_ts}.".encode() + cancellation, hashlib.sha256
+    ).hexdigest()
+    cancelled = await api.post(
+        "/billing/webhook",
+        content=cancellation,
+        headers={
+            "content-type": "application/json",
+            "stripe-signature": f"t={cancel_ts},v1={cancel_sig}",
+        },
+    )
+    assert cancelled.status_code == 200, cancelled.text
+    assert cancelled.json()["plan"] is None
+    downgraded = await api.get("/users/me", headers=user["headers"])
+    assert downgraded.json()["subscription_tier"] is None
+    assert downgraded.json()["limits"]["cases"] == 2
+
     bad = await api.post(
         "/billing/webhook",
         content=payload,
@@ -709,6 +768,22 @@ def test_weakness_parser_never_raises():
     fallback = parse_weakness_report("not json at all")
     assert fallback["parse_error"] is True
     assert fallback["weaknesses"] == []
+
+    with_settlement = parse_weakness_report(
+        json.dumps(
+            {
+                "summary": "ok",
+                "weaknesses": [],
+                "settlement": {
+                    "range": "$10k–$20k",
+                    "factors": ["liability risk"],
+                    "cost_risks": ["expert fees"],
+                },
+            }
+        )
+    )
+    assert with_settlement["settlement"]["range"] == "$10k–$20k"
+    assert with_settlement["settlement"]["cost_risks"] == ["expert fees"]
 
 
 async def test_case_quota_and_upgrade(api, user, case, monkeypatch, settings):

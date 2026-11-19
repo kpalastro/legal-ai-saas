@@ -6,8 +6,9 @@
 > uploads, simulation attestation, DOCX/PDF export, deadlines/limitations,
 > weakness/claim/element analysis, organisations/RBAC + sharing, legal registry,
 > Stripe checkout/webhooks, request ids, rate limiting, metrics, consent,
-> document versions/signatures, conflict checks, support resources, and
-> migrations 0003–0006 are in place. Containers use the `lexsim_api` login role.
+> document versions/signatures, review comments, version diff, settlement/cost
+> analysis, conflict checks, support resources, subscription cancellation, and
+> migrations 0003–0007 are in place. Containers use the `lexsim_api` login role.
 > See `README.md` and `requirement/PENDING.md` for the current state.
 
 ## Runtime topology (localhost v1)

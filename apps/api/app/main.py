@@ -16,6 +16,7 @@ from app.llm import get_provider
 from app.middleware import RequestContextMiddleware
 from app.routers.cases import router as cases_router
 from app.routers.cases import simulations_router
+from app.routers.comments import router as comments_router
 from app.routers.conflicts import router as conflicts_router
 from app.routers.legal import router as legal_router
 from app.routers.organisations import router as organisations_router
@@ -76,6 +77,7 @@ app.include_router(privacy_router)
 app.include_router(organisations_router)
 app.include_router(legal_router)
 app.include_router(conflicts_router)
+app.include_router(comments_router)
 
 # Feature 4/5/6 routers: documents + citations verification, deadline calculator,
 # billing scaffold (Stripe test-mode). All inherit fail-closed JWT auth via get_db.

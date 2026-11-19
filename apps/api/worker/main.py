@@ -12,10 +12,12 @@ legal_hold (idempotent: each case matches once; a re-run archives 0).
 from __future__ import annotations
 
 import asyncio
+import html
 import json
 import logging
 import smtplib
 from datetime import UTC, datetime, timedelta
+from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 
 from arq import cron
@@ -122,10 +124,20 @@ async def retention_sweep(ctx: dict) -> dict:
 
 def _send_email(to: str, subject: str, body: str) -> bool:
     settings = get_settings()
-    message = MIMEText(body, "plain", "utf-8")
+    message = MIMEMultipart("alternative")
     message["Subject"] = subject
     message["From"] = settings.smtp_from
     message["To"] = to
+    message.attach(MIMEText(body, "plain", "utf-8"))
+    rendered = html.escape(body).replace("\n", "<br>")
+    html_body = (
+        "<html><body style=\"font-family:system-ui,sans-serif;line-height:1.5\">"
+        f"<h2 style=\"margin:0 0 8px\">{html.escape(subject)}</h2>"
+        f"<p>{rendered}</p>"
+        "<p style=\"color:#666;font-size:12px\">LexSim AI — preparation assistance, "
+        "not legal advice.</p></body></html>"
+    )
+    message.attach(MIMEText(html_body, "html", "utf-8"))
     try:
         with smtplib.SMTP(settings.smtp_host, settings.smtp_port, timeout=10) as smtp:
             smtp.sendmail(settings.smtp_from, [to], message.as_string())

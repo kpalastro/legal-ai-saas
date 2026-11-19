@@ -60,7 +60,10 @@ ANALYSIS_SYSTEM = (
     '"source": "<what supports it, or empty>"}], '
     '"elements": [{"element": "<element of the cause of action>", '
     '"status": "addressed"|"missing"|"unclear", '
-    '"note": "<what the transcript does or does not establish>"}]}'
+    '"note": "<what the transcript does or does not establish>"}], '
+    '"settlement": {"range": "<indicative negotiation range, or empty if not meaningful>", '
+    '"factors": ["<factor that moves the range>"], '
+    '"cost_risks": ["<procedural or cost risk>"]}}'
 )
 
 ANALYSIS_INSTRUCTION = (
@@ -147,11 +150,29 @@ def parse_weakness_report(text: str) -> dict:
                         }
                     )
 
+            settlement: dict = {}
+            raw_settlement = data.get("settlement")
+            if isinstance(raw_settlement, dict):
+                factors = raw_settlement.get("factors")
+                costs = raw_settlement.get("cost_risks")
+                settlement = {
+                    "range": str(raw_settlement.get("range", ""))[:300],
+                    "factors": [
+                        str(item)[:300]
+                        for item in (factors if isinstance(factors, list) else [])[:10]
+                    ],
+                    "cost_risks": [
+                        str(item)[:300]
+                        for item in (costs if isinstance(costs, list) else [])[:10]
+                    ],
+                }
+
             return {
                 "summary": summary,
                 "weaknesses": weaknesses,
                 "claims": claims,
                 "elements": elements,
+                "settlement": settlement,
                 "note": "not legal advice",
                 "methodology_note": (
                     "Model-generated preparation analysis, not a legal opinion. "
@@ -163,6 +184,7 @@ def parse_weakness_report(text: str) -> dict:
         "weaknesses": [],
         "claims": [],
         "elements": [],
+        "settlement": {},
         "parse_error": True,
         "note": "not legal advice",
         "methodology_note": "The analysis response was not valid JSON; raw text retained.",

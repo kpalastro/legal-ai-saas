@@ -115,6 +115,22 @@ Suite: 94 passed (4 CORS tests run only when the API is live), coverage ~82%.
   overrides, and updated security/privacy/deployment docs.
 - **Tests.** 94 passed, ~82% coverage.
 
+## Completed 2026-11-19 (phase 5 — review and lifecycle)
+
+- **Document review comments.** `document_comments` with RLS through the
+  document's case; add/resolve/reopen/delete; writer-only writes.
+- **Version diff.** `GET /documents/{id}/diff` (or `?against=`) returns a
+  unified diff within the same version group; UI "Compare".
+- **Settlement/cost analysis.** The analysis now returns an indicative range,
+  factors and cost/procedural risks, with the preparation-assistance disclaimer.
+- **Subscription lifecycle.** Checkout writes subscription metadata, supports
+  automatic tax/tax IDs and optional trials; `customer.subscription.deleted`
+  downgrades to free.
+- **Accessibility/polish.** Skip link, focus-visible rings, reduced-motion CSS,
+  ARIA status/current attributes; HTML+text reminder emails.
+- **Tests.** 94 passed, ~82% coverage; comments/diff/settlement/cancellation and
+  the 0007 migration are covered.
+
 ## Remaining — trust and legal accuracy
 
 - [ ] **RAG over authoritative sources.** Retrieval now works over the user's
@@ -144,14 +160,15 @@ Suite: 94 passed (4 CORS tests run only when the API is live), coverage ~82%.
 ## Remaining — professional platform
 
 - [ ] SSO/SAML/SCIM for enterprise tiers (orgs/RBAC and sharing are done).
-- [ ] Client portal, comments, visual redlining/diff, court forms, e-filing
-  integrations. (Versioning and typed-name signatures are done; a signature is
-  not legal execution and must be reviewed by counsel.)
+- [ ] Client portal, visual redlining, court forms, e-filing integrations.
+  (Versioning, unified diff, comments and typed-name signatures are done; a
+  signature is not legal execution and must be reviewed by counsel.)
 - [ ] Court forms, DOCX/PDF formatting per court, versioning/diff/redline,
   e-signature, e-filing integrations.
-- [ ] Elements checklist, evidence sufficiency, settlement/ADR analysis,
-  costs/risk views.
-- [ ] Accessibility (WCAG), plain language, translations, mobile-first flows.
+- [ ] Evidence-sufficiency and ADR/negotiation workflow beyond the model-generated
+  settlement range/cost risks (element checklists are done).
+- [ ] Full WCAG audit, plain-language rewrite, translations and mobile-first
+  flows. (Skip link, focus rings, reduced-motion and ARIA status/current are in.)
 - [ ] Integrations: DMS, accounting, court portals (calendar export + email
   reminders are done).
 
@@ -178,8 +195,9 @@ Suite: 94 passed (4 CORS tests run only when the API is live), coverage ~82%.
   IaC (Terraform), container/dependency scanning.
 - [ ] Observability: configure `SENTRY_DSN` (implemented, PII off) or
   OpenTelemetry; build SLOs/dashboards. `/metrics` is in-process only.
-- [ ] Real Stripe keys + live webhook test; GST invoices, trials, dunning
-  (entitlements/quotas and webhook verification are implemented).
+- [ ] Real Stripe keys + live webhook test; tax invoice/GST entity setup and
+  dunning (automatic tax, optional trials, cancellation downgrade and
+  entitlements/quotas are implemented).
 
 ## Remaining — engineering hygiene
 

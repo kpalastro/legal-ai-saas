@@ -82,6 +82,8 @@ class Settings(BaseSettings):
     # --- billing (Stripe test/prod; unset = 503 for real checkout) ---
     stripe_secret_key: str | None = None
     stripe_webhook_secret: str | None = None
+    stripe_automatic_tax: bool = True
+    stripe_trial_days: int = 0
     checkout_success_url: str = "http://localhost:3000/?billing=success"
     checkout_cancel_url: str = "http://localhost:3000/?billing=cancel"
 
