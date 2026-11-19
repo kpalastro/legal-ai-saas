@@ -44,11 +44,34 @@ jobs:
           # to the dev port so local runs work out of the box
           LEXSIM_TEST_DATABASE_URL: postgresql+asyncpg://postgres:postgres@localhost:5432/lexsim
           DATABASE_URL: postgresql+asyncpg://postgres:postgres@localhost:5432/lexsim
+      # Reversibility guard: a downgrade that cannot run is a migration that
+      # cannot be rolled back during an incident.
+      - name: Migrations are reversible on a fresh DB
+        run: uv run alembic downgrade base && uv run alembic upgrade head
+        working-directory: apps/api
+        env:
+          DATABASE_URL: postgresql+asyncpg://postgres:postgres@localhost:5432/lexsim
       # G8 stub: assert no cross-region Bedrock model IDs anywhere in the repo
       - name: G8 — no cross-region inference routing (APP 8)
         run: |
           ! grep -rE '"(global|apac|us|eu)\.' apps/api/app apps/api/worker \
             && echo "G8 pass: all model IDs regional"
+  web:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: apps/web/package-lock.json
+      - run: npm ci
+        working-directory: apps/web
+      - run: npx tsc --noEmit
+        working-directory: apps/web
+      - run: npm run build
+        working-directory: apps/web
+
   # Pending item #4: fail CI when a running api container serves code that diverges
   # from git HEAD (the stale-container gap that bit twice on 31 Aug).
   drift:

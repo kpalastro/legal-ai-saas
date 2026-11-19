@@ -52,10 +52,34 @@ class Settings(BaseSettings):
     gotrue_url: str = "http://localhost:9999"
     supabase_jwt_secret: str = "dev-only-jwt-secret-change-me"
 
+    # --- database least privilege ---
+    # Every app transaction runs `SET LOCAL ROLE <db_app_role>` so RLS binds even
+    # when the connection user is the table owner/superuser (dev compose). In prod
+    # point this at the dedicated login role (member of lexsim_app).
+    db_app_role: str = "lexsim_app"
+    # Fail closed if the effective role can bypass RLS (superuser/BYPASSRLS).
+    db_require_non_superuser: bool = True
+
+    # --- uploads (never served by the web app; outside the web root) ---
+    storage_dir: str = "./storage"
+    max_upload_bytes: int = 20 * 1024 * 1024  # 20 MB
+
+    # --- billing (Stripe test/prod; unset = 503 for real checkout) ---
+    stripe_secret_key: str | None = None
+    stripe_webhook_secret: str | None = None
+    checkout_success_url: str = "http://localhost:3000/?billing=success"
+    checkout_cancel_url: str = "http://localhost:3000/?billing=cancel"
+
     environment: str = "dev"
 
     def validate_provider(self) -> None:
         """Fail fast at boot on misconfiguration (test_bedrock_region_pinned, S1)."""
+        import re
+
+        if self.db_app_role and not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", self.db_app_role):
+            raise ValidationError(
+                f"DB_APP_ROLE must be a bare SQL identifier, got {self.db_app_role!r}"
+            )
         if self.llm_provider not in ("ollama", "bedrock"):
             raise ValidationError(f"LLM_PROVIDER must be ollama|bedrock, got {self.llm_provider!r}")
         if self.llm_provider == "bedrock":

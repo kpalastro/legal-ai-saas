@@ -15,7 +15,19 @@ import sys
 
 from alembic.migration import MigrationContext
 from alembic.operations import Operations
+from sqlalchemy import text
 from sqlalchemy.ext.asyncio import create_async_engine
+
+# Dev-only app-role grants. CI runs the same statements via
+# infra/scripts/install_auth_stub.py --grants-only after alembic; doing it here
+# makes the documented one-command setup actually produce a working app role.
+APP_GRANTS = """
+GRANT USAGE ON SCHEMA public TO lexsim_app;
+GRANT USAGE ON SCHEMA auth TO lexsim_app;
+GRANT SELECT, INSERT, UPDATE, DELETE ON auth.users TO lexsim_app;
+GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO lexsim_app;
+GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO lexsim_app;
+"""
 
 
 def load_migration(path: str):
@@ -83,8 +95,11 @@ async def apply(dsn: str) -> None:
 
         await conn.run_sync(_run)
         await conn.commit()
+        for stmt in split_sql(APP_GRANTS):
+            await conn.execute(text(stmt))
+        await conn.commit()
     await eng.dispose()
-    print(f"Applied {len(versions)} migration(s) to {dsn}")
+    print(f"Applied {len(versions)} migration(s) + app-role grants to {dsn}")
 
 
 if __name__ == "__main__":

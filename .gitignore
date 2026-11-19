@@ -22,7 +22,16 @@ bots/
 .next/
 node_modules/
 apps/web/node_modules
+apps/web/tsconfig.tsbuildinfo
+apps/web/.env.local
 *.log
+
+# uploaded case documents (outside the web root, never versioned)
+storage/
+infra/storage/
+
+# editor swap files
+*.swp
 
 # docker / local state
 infra/.env

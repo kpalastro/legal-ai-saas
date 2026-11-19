@@ -29,11 +29,13 @@ TABLES = (
 
 
 def upgrade() -> None:
+    op.execute("SET LOCAL search_path = public, auth")  # deterministic schema (see 0001)
     for table in TABLES:
-        op.execute(f"ALTER TABLE {table} FORCE ROW LEVEL SECURITY")
+        op.execute(f"ALTER TABLE public.{table} FORCE ROW LEVEL SECURITY")
 
 
 def downgrade() -> None:
     # Disabling FORCE restores owner bypass; policies themselves stay enabled.
+    op.execute("SET LOCAL search_path = public, auth")
     for table in TABLES:
-        op.execute(f"ALTER TABLE {table} NO FORCE ROW LEVEL SECURITY")
+        op.execute(f"ALTER TABLE public.{table} NO FORCE ROW LEVEL SECURITY")

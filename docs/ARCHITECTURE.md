@@ -1,4 +1,11 @@
-# LexSim AI — Current Architecture (31 Aug 2026)
+# LexSim AI — Current Architecture (31 Aug 2026; product loop completed 19 Nov 2026)
+
+> **19 Nov 2026 completion note:** the debate is now grounded in case intake +
+> extracted uploads and carries the transcript forward; app transactions bind
+> `lexsim_app` on every request (`arm_request`) so RLS actually applies; uploads,
+> simulation attestation, DOCX/PDF export, persisted deadlines/limitations,
+> Stripe checkout/webhooks, request ids, rate limiting and migration 0003 are in
+> place. See `README.md` and `requirement/PENDING.md` for the current state.
 
 ## Runtime topology (localhost v1)
 

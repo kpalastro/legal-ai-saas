@@ -12,3 +12,5 @@ os.environ.setdefault(
     "LEXSIM_TEST_DATABASE_URL",
     "postgresql+asyncpg://postgres:postgres@localhost:5434/lexsim",
 )
+# Keep test uploads out of the repo and out of the dev demo's storage dir.
+os.environ.setdefault("STORAGE_DIR", "/tmp/lexsim-test-storage")

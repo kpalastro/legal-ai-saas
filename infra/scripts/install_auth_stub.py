@@ -17,11 +17,16 @@ restricted runner egress; docker is guaranteed — the job started the container
 from __future__ import annotations
 
 import asyncio
+import os
 import pathlib
 import subprocess
 import sys
 
-DSN = "postgresql://postgres:postgres@localhost:5432/lexsim"
+# CI's service container publishes :5432. Local dev compose publishes :5434,
+# so override with LEXSIM_STUB_DSN when running this by hand on a dev machine.
+DSN = os.environ.get(
+    "LEXSIM_STUB_DSN", "postgresql://postgres:postgres@localhost:5432/lexsim"
+)
 STUB = pathlib.Path(__file__).parent.parent / "postgres-init" / "01-auth-stub.sql"
 
 ROLE_SQL = """

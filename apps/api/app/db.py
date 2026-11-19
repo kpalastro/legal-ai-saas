@@ -48,6 +48,45 @@ def decode_supabase_jwt(token: str) -> dict:
     )
 
 
+async def arm_request(db, *, user_id: str) -> None:
+    """Bind the current transaction to the least-privilege app role + caller claims.
+
+    Why this exists (audit finding): the dev compose DSN is the `postgres`
+    superuser. Superusers bypass RLS even with FORCE ROW LEVEL SECURITY, so every
+    app query was reading across tenants while the tests (which explicitly
+    `SET LOCAL ROLE lexsim_app`) passed. This helper makes the running app do the
+    same thing the tests do, and fails closed if the effective role can bypass RLS.
+
+    Transaction-local by design: callers that commit per turn (debate/audit
+    durability) must call this again after each commit.
+    """
+    s = get_settings()
+    role = s.db_app_role
+    if role:
+        # Validated by Settings.validate_provider(); identifiers cannot be bound.
+        await db.execute(text(f"SET LOCAL ROLE {role}"))
+    await db.execute(text("SET LOCAL search_path = public, auth"))
+    await db.execute(
+        text("SELECT set_config('request.jwt.claims', :claims, true)"),
+        {"claims": f'{{"sub": "{user_id}", "role": "authenticated"}}'},
+    )
+    if s.db_require_non_superuser:
+        bypass = (
+            await db.execute(
+                text(
+                    "SELECT rolsuper OR rolbypassrls FROM pg_roles"
+                    " WHERE rolname = current_user"
+                )
+            )
+        ).scalar_one_or_none()
+        if bypass is not False:
+            raise RuntimeError(
+                "refusing to run as a superuser/BYPASSRLS role — RLS would be bypassed;"
+                " configure DB_APP_ROLE (member of lexsim_app) or set"
+                " DB_REQUIRE_NON_SUPERUSER=false only for controlled migrations"
+            )
+
+
 async def get_db(
     authorization: str | None = Header(default=None, alias="Authorization"),
     token: str | None = None,  # SSE-only query-param fallback (?token=…)
@@ -84,10 +123,10 @@ async def get_db(
     sub = claims["sub"]
     email = claims.get("email") or f"{sub}@unknown.local"
     async with SessionFactory() as session:
-        await session.execute(
-            text("SELECT set_config('request.jwt.claims', :claims, true)"),
-            {"claims": f'{{"sub": "{sub}", "role": "authenticated"}}'},
-        )
+        # Bind the least-privilege role + verified claims before any query. Also
+        # pins schema resolution: dev GoTrue once put `auth` first on the role
+        # search_path, silently resolving unqualified `users`/`cases` wrongly.
+        await arm_request(session, user_id=sub)
         # Verified claims on the session info dict — routers use these for the
         # auth.users -> users mirror upsert (never client-supplied values).
         session.info["user_sub"] = sub

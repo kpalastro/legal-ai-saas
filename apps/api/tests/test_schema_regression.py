@@ -26,3 +26,15 @@ def test_no_clerk_user_id_in_migrations() -> None:
 def test_users_table_references_auth_users() -> None:
     initial = (MIGRATIONS / "0001_initial_schema.py").read_text()
     assert "REFERENCES auth.users(id)" in initial
+
+
+def test_migrations_pin_the_public_schema() -> None:
+    """Regression guard for the dev/CI divergence found on 19 Nov 2026: the
+    GoTrue role-level search_path made unqualified CREATE TABLE land in `auth`.
+    Migrations must pin resolution and explicitly own public.<table>."""
+    for name in ("0001_initial_schema.py", "0002_force_rls.py", "0003_case_intake_and_export.py"):
+        source = (MIGRATIONS / name).read_text()
+        assert "SET LOCAL search_path = public, auth" in source, name
+    initial = (MIGRATIONS / "0001_initial_schema.py").read_text()
+    for table in ("cases", "documents", "simulations", "generated_documents", "deadlines"):
+        assert f"CREATE TABLE public.{table}" in initial, table

@@ -20,6 +20,7 @@ dependencies = [
     "httpx>=0.28",
     "pyjwt>=2.9",
     "structlog>=24.4",
+    "python-multipart>=0.0.34",
 ]
 
 [dependency-groups]
@@ -33,6 +34,10 @@ dev = [
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
+# One event loop for the session: the app's module-global asyncpg pool must not
+# hand a connection bound to a previous test's loop to the next test.
+asyncio_default_fixture_loop_scope = "session"
+asyncio_default_test_loop_scope = "session"
 testpaths = ["tests"]
 markers = [
   "compliance: SC Gen 23 / APP / LPP gates — cannot be skipped on PRs touching documents/, export, rls, audit",

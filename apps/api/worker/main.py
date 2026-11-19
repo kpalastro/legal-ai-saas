@@ -21,6 +21,7 @@ from sqlalchemy.ext.asyncio import create_async_engine
 
 from app.agents.engine import run_debate
 from app.config import get_settings
+from app.db import SessionFactory, arm_request
 from app.llm import get_provider
 
 RETENTION_YEARS = 7  # C3 control (APP; legal-hold override honoured)
@@ -35,20 +36,27 @@ async def run_simulation(ctx: dict, case_id: str, user_id: str) -> dict:
     - every turn writes audit_log + audit_content through write_audit_row() under
       those claims (C1/G5), enforced by RLS as the app role in prod wiring.
     """
-    engine = create_async_engine(get_settings().database_url)
     provider = get_provider()
     try:
-        async with engine.begin() as conn:
-            await conn.execute(
-                text("SELECT set_config('request.jwt.claims', :claims, true)"),
-                {"claims": json.dumps({"sub": user_id, "role": "authenticated"})},
-            )
+        async with SessionFactory() as session:
+            # Least-privilege role + verified claims; run_debate re-arms after each
+            # per-turn commit (transaction-local role/claims would otherwise reset).
+            await arm_request(session, user_id=user_id)
             transcript = await run_debate(
-                conn, case_id=case_id, user_id=user_id, provider=provider
+                session, case_id=case_id, user_id=user_id, provider=provider
             )
-            await persist_result(conn, case_id=case_id, transcript=transcript)
-    finally:
-        await engine.dispose()
+            await persist_result(session, case_id=case_id, transcript=transcript)
+            await session.commit()
+    except Exception:
+        # Leave the case runnable after a failure, and keep the audit rows already
+        # committed by run_debate (per-turn durability).
+        async with SessionFactory() as session:
+            await arm_request(session, user_id=user_id)
+            await session.execute(
+                text("UPDATE public.cases SET status='intake' WHERE id=:c"), {"c": case_id}
+            )
+            await session.commit()
+        raise
     return {
         "case_id": case_id,
         "turns": len(transcript),
@@ -56,19 +64,31 @@ async def run_simulation(ctx: dict, case_id: str, user_id: str) -> dict:
     }
 
 
-async def persist_result(conn, *, case_id: str, transcript: list[dict]) -> None:
-    """Persist transcript + calibrated verdict on a simulations row for the case."""
+async def persist_result(conn, *, case_id: str, transcript: list[dict]) -> str:
+    """Persist the transcript/verdict and return the new simulation id.
+
+    The id matters: documents link to it, and the export gate needs it to find
+    the user's attestation. Case status moves to `completed` here.
+    """
+    row = (
+        await conn.execute(
+            text(
+                "INSERT INTO public.simulations"
+                " (case_id, debate_transcript, outcome_prediction, status)"
+                " VALUES (:c, CAST(:t AS jsonb), CAST(:o AS jsonb), 'completed')"
+                " RETURNING id"
+            ),
+            {
+                "c": case_id,
+                "t": json.dumps(transcript),
+                "o": json.dumps(transcript[-1].get("verdict", {}) if transcript else {}),
+            },
+        )
+    ).scalar_one()
     await conn.execute(
-        text(
-            "INSERT INTO simulations (case_id, debate_transcript, outcome_prediction)"
-            " VALUES (:c, CAST(:t AS jsonb), CAST(:o AS jsonb))"
-        ),
-        {
-            "c": case_id,
-            "t": json.dumps(transcript),
-            "o": json.dumps(transcript[-1].get("verdict", {}) if transcript else {}),
-        },
+        text("UPDATE public.cases SET status='completed' WHERE id=:c"), {"c": case_id}
     )
+    return str(row)
 
 
 async def retention_sweep(ctx: dict) -> dict:
@@ -80,7 +100,7 @@ async def retention_sweep(ctx: dict) -> dict:
             rows = (
                 await conn.execute(
                     text(
-                        "UPDATE cases SET status='archived', updated_at=NOW()"
+                        "UPDATE public.cases SET status='archived', updated_at=NOW()"
                         " WHERE created_at < :cutoff AND legal_hold = FALSE"
                         " AND status <> 'archived' RETURNING id"
                     ),

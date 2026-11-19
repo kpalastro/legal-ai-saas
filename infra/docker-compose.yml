@@ -70,11 +70,19 @@ services:
       # host.docker.internal — never `localhost` inside the container, and never
       # OLLAMA_HOST=0.0.0.0 (Ollama has no auth).
       OLLAMA_BASE_URL: http://host.docker.internal:11434
-      LLM_MODEL: qwen3.5:latest
+      LLM_MODEL: qwen3.5:0.8b
       DATABASE_URL: postgresql+asyncpg://postgres:postgres@postgres:5432/lexsim
+      # App queries run SET LOCAL ROLE lexsim_app — the postgres connection
+      # would otherwise bypass RLS even with FORCE ROW LEVEL SECURITY.
+      DB_APP_ROLE: lexsim_app
+      DB_REQUIRE_NON_SUPERUSER: "true"
       REDIS_URL: redis://redis:6379/0
       GOTRUE_URL: http://supabase-auth:9999
       SUPABASE_JWT_SECRET: ${GOTRUE_JWT_SECRET:-dev-only-jwt-secret-change-me}
+      STORAGE_DIR: /srv/storage
+      MAX_UPLOAD_BYTES: "20971520"
+    volumes:
+      - ../storage:/srv/storage
     extra_hosts: ["host.docker.internal:host-gateway"]   # linux runners; no-op on macOS
     ports: ["8000:8000"]
     depends_on:

@@ -22,6 +22,12 @@ depends_on: str | Sequence[str] | None = None
 
 
 def upgrade() -> None:
+    # Pin schema resolution: the dev GoTrue role historically put `auth` first,
+    # which made unqualified CREATE TABLE land in `auth` while CI (public-first)
+    # put them in `public` — a real dev/CI divergence found by running the suite
+    # against a fresh compose DB. Migrations own `public` (except the auth stub).
+    op.execute("SET LOCAL search_path = public, auth")
+
     # --- users: Supabase Auth mirror (C6: no clerk_user_id, ever) ---
     # SCHEMA-PINNED to public: the local GoTrue setup gives the postgres role
     # `search_path = auth, public`, so an unqualified `users` would resolve to
@@ -43,7 +49,7 @@ def upgrade() -> None:
     # --- cases (tenant root) ---
     op.execute(
         """
-        CREATE TABLE cases (
+        CREATE TABLE public.cases (
           id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
           user_id UUID NOT NULL REFERENCES public.users(id) ON DELETE CASCADE,
           title TEXT NOT NULL,
@@ -61,9 +67,9 @@ def upgrade() -> None:
     # --- documents (uploaded evidence) ---
     op.execute(
         """
-        CREATE TABLE documents (
+        CREATE TABLE public.documents (
           id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-          case_id UUID NOT NULL REFERENCES cases(id) ON DELETE CASCADE,
+          case_id UUID NOT NULL REFERENCES public.cases(id) ON DELETE CASCADE,
           file_path TEXT NOT NULL,
           file_type TEXT NOT NULL,
           uploaded_at TIMESTAMPTZ DEFAULT NOW()
@@ -74,9 +80,9 @@ def upgrade() -> None:
     # --- simulations ---
     op.execute(
         """
-        CREATE TABLE simulations (
+        CREATE TABLE public.simulations (
           id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-          case_id UUID NOT NULL REFERENCES cases(id) ON DELETE CASCADE,
+          case_id UUID NOT NULL REFERENCES public.cases(id) ON DELETE CASCADE,
           debate_transcript JSONB NOT NULL DEFAULT '[]'::jsonb,
           outcome_prediction JSONB,
           weakness_report JSONB,
@@ -97,10 +103,10 @@ def upgrade() -> None:
     # Postgres (verified: asyncpg FeatureNotSupportedError on first apply).
     op.execute(
         """
-        CREATE TABLE generated_documents (
+        CREATE TABLE public.generated_documents (
           id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-          case_id UUID NOT NULL REFERENCES cases(id) ON DELETE CASCADE,
-          simulation_id UUID REFERENCES simulations(id),
+          case_id UUID NOT NULL REFERENCES public.cases(id) ON DELETE CASCADE,
+          simulation_id UUID REFERENCES public.simulations(id),
           doc_type TEXT NOT NULL CHECK (doc_type NOT IN
             ('affidavit','witness_statement','expert_report','evidentiary_material')),  -- G3 hard block
           content TEXT NOT NULL,
@@ -126,7 +132,7 @@ def upgrade() -> None:
           RETURN NEW;
         END;
         $$ LANGUAGE plpgsql;
-        CREATE TRIGGER export_gate_citations BEFORE INSERT OR UPDATE ON generated_documents
+        CREATE TRIGGER export_gate_citations BEFORE INSERT OR UPDATE ON public.generated_documents
           FOR EACH ROW EXECUTE FUNCTION enforce_export_citations();
         """
     )
@@ -136,7 +142,7 @@ def upgrade() -> None:
         CREATE OR REPLACE FUNCTION enforce_export_attestation() RETURNS trigger AS $$
         BEGIN
           IF NEW.exported = TRUE AND NEW.simulation_id IS NOT NULL THEN
-            IF NOT (SELECT user_attestation FROM simulations WHERE id = NEW.simulation_id) THEN
+            IF NOT (SELECT user_attestation FROM public.simulations WHERE id = NEW.simulation_id) THEN
               RAISE EXCEPTION
                 'Export blocked: simulation.user_attestation is false (SC Gen 23 attestation required)';
             END IF;
@@ -145,7 +151,7 @@ def upgrade() -> None:
         END;
         $$ LANGUAGE plpgsql;
         CREATE TRIGGER export_gate_attestation
-          BEFORE INSERT OR UPDATE ON generated_documents
+          BEFORE INSERT OR UPDATE ON public.generated_documents
           FOR EACH ROW EXECUTE FUNCTION enforce_export_attestation();
         """
     )
@@ -153,9 +159,9 @@ def upgrade() -> None:
     # --- deadlines ---
     op.execute(
         """
-        CREATE TABLE deadlines (
+        CREATE TABLE public.deadlines (
           id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-          case_id UUID NOT NULL REFERENCES cases(id) ON DELETE CASCADE,
+          case_id UUID NOT NULL REFERENCES public.cases(id) ON DELETE CASCADE,
           trigger_doc_type TEXT NOT NULL,
           due_date DATE NOT NULL,
           reminder_sent BOOLEAN DEFAULT FALSE,
@@ -170,15 +176,15 @@ def upgrade() -> None:
     # this data will ever be to keep); audit_log references it via content_ref.
     op.execute(
         """
-        CREATE TABLE audit_content (
+        CREATE TABLE public.audit_content (
           id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
           prompt_text TEXT NOT NULL,
           response_text TEXT NOT NULL,
           created_at TIMESTAMPTZ DEFAULT NOW()
         );
-        CREATE TABLE audit_log (
+        CREATE TABLE public.audit_log (
           id BIGSERIAL PRIMARY KEY,
-          case_id UUID REFERENCES cases(id) ON DELETE CASCADE,
+          case_id UUID REFERENCES public.cases(id) ON DELETE CASCADE,
           user_id UUID REFERENCES public.users(id),
           event_type TEXT NOT NULL,
           model_id TEXT NOT NULL,
@@ -195,9 +201,9 @@ def upgrade() -> None:
           RAISE EXCEPTION 'audit_content is append-only (LPP/C1): UPDATE/DELETE rejected';
         END;
         $$ LANGUAGE plpgsql;
-        CREATE TRIGGER audit_content_no_update BEFORE UPDATE ON audit_content
+        CREATE TRIGGER audit_content_no_update BEFORE UPDATE ON public.audit_content
           FOR EACH ROW EXECUTE FUNCTION audit_content_append_only();
-        CREATE TRIGGER audit_content_no_delete BEFORE DELETE ON audit_content
+        CREATE TRIGGER audit_content_no_delete BEFORE DELETE ON public.audit_content
           FOR EACH ROW EXECUTE FUNCTION audit_content_append_only();
         REVOKE UPDATE, DELETE, TRUNCATE ON audit_content FROM PUBLIC;
         CREATE OR REPLACE FUNCTION audit_log_content_ref_immutable() RETURNS trigger AS $$
@@ -217,76 +223,77 @@ def upgrade() -> None:
           RAISE EXCEPTION 'audit_log is append-only (LPP/C1): UPDATE/DELETE rejected';
         END;
         $$ LANGUAGE plpgsql;
-        CREATE TRIGGER audit_log_no_update BEFORE UPDATE ON audit_log
+        CREATE TRIGGER audit_log_no_update BEFORE UPDATE ON public.audit_log
           FOR EACH ROW EXECUTE FUNCTION audit_log_append_only();
-        CREATE TRIGGER audit_log_no_delete BEFORE DELETE ON audit_log
+        CREATE TRIGGER audit_log_no_delete BEFORE DELETE ON public.audit_log
           FOR EACH ROW EXECUTE FUNCTION audit_log_append_only();
-        REVOKE UPDATE, DELETE, TRUNCATE ON audit_log FROM PUBLIC;
+        REVOKE UPDATE, DELETE, TRUNCATE ON public.audit_log FROM PUBLIC;
         """
     )
 
     # --- RLS: all SIX tenant tables (S2: EXISTS join through cases for children) ---
-    op.execute("ALTER TABLE cases ENABLE ROW LEVEL SECURITY;")
+    op.execute("ALTER TABLE public.cases ENABLE ROW LEVEL SECURITY;")
     op.execute(
         """
-        CREATE POLICY cases_owner ON cases
+        CREATE POLICY cases_owner ON public.cases
           USING (user_id = auth.uid())
           WITH CHECK (user_id = auth.uid());
         """
     )
     for table in ("documents", "simulations", "generated_documents", "deadlines"):
-        op.execute(f"ALTER TABLE {table} ENABLE ROW LEVEL SECURITY;")
+        op.execute(f"ALTER TABLE public.{table} ENABLE ROW LEVEL SECURITY;")
         op.execute(
             f"""
-            CREATE POLICY {table}_via_case ON {table}
+            CREATE POLICY {table}_via_case ON public.{table}
               USING (EXISTS (
-                SELECT 1 FROM cases WHERE cases.id = {table}.case_id AND cases.user_id = auth.uid()
+                SELECT 1 FROM public.cases WHERE cases.id = {table}.case_id AND cases.user_id = auth.uid()
               ))
               WITH CHECK (EXISTS (
-                SELECT 1 FROM cases WHERE cases.id = {table}.case_id AND cases.user_id = auth.uid()
+                SELECT 1 FROM public.cases WHERE cases.id = {table}.case_id AND cases.user_id = auth.uid()
               ));
             """
         )
     # audit_log: readable by owner through case, insertable by backend role only.
     # audit_content is NOT tenant-readable: it holds the verbatim prompts, so only
     # the backend service role touches it — RLS enabled, no owner policy.
-    op.execute("ALTER TABLE audit_log ENABLE ROW LEVEL SECURITY;")
+    op.execute("ALTER TABLE public.audit_log ENABLE ROW LEVEL SECURITY;")
     op.execute(
         """
-        CREATE POLICY audit_log_insert_backend ON audit_log
+        CREATE POLICY audit_log_insert_backend ON public.audit_log
           FOR INSERT WITH CHECK (user_id = auth.uid());
         """
     )
-    op.execute("ALTER TABLE audit_content ENABLE ROW LEVEL SECURITY;")
+    op.execute("ALTER TABLE public.audit_content ENABLE ROW LEVEL SECURITY;")
     # the app role writes/reads the content store (LPP reconstruction); tenants never do
     op.execute(
         """
-        CREATE POLICY audit_content_write_backend ON audit_content
+        CREATE POLICY audit_content_write_backend ON public.audit_content
           FOR INSERT TO lexsim_app WITH CHECK (true);
-        CREATE POLICY audit_content_read_backend ON audit_content
+        CREATE POLICY audit_content_read_backend ON public.audit_content
           FOR SELECT TO lexsim_app USING (true);
         """
     )
     op.execute(
         """
-        CREATE POLICY audit_log_read_owner ON audit_log
+        CREATE POLICY audit_log_read_owner ON public.audit_log
           FOR SELECT USING (EXISTS (
-            SELECT 1 FROM cases WHERE cases.id = audit_log.case_id AND cases.user_id = auth.uid()
+            SELECT 1 FROM public.cases
+            WHERE cases.id = audit_log.case_id AND cases.user_id = auth.uid()
           ));
         """
     )
 
 
 def downgrade() -> None:
-    op.execute("DROP POLICY IF EXISTS audit_content_write_backend ON audit_content;")
-    op.execute("DROP POLICY IF EXISTS audit_content_read_backend ON audit_content;")
-    op.execute("DROP TABLE IF EXISTS audit_log CASCADE;")
-    op.execute("DROP TABLE IF EXISTS audit_content CASCADE;")
-    op.execute("DROP TABLE IF EXISTS deadlines CASCADE;")
-    op.execute("DROP TABLE IF EXISTS generated_documents CASCADE;")
-    op.execute("DROP TABLE IF EXISTS simulations CASCADE;")
-    op.execute("DROP TABLE IF EXISTS documents CASCADE;")
-    op.execute("DROP TABLE IF EXISTS cases CASCADE;")
+    op.execute("DROP POLICY IF EXISTS audit_content_write_backend ON public.audit_content;")
+    op.execute("DROP POLICY IF EXISTS audit_content_read_backend ON public.audit_content;")
+    op.execute("DROP TABLE IF EXISTS public.audit_log CASCADE;")
+    op.execute("DROP TABLE IF EXISTS public.audit_content CASCADE;")
+    op.execute("DROP TABLE IF EXISTS public.deadlines CASCADE;")
+    op.execute("DROP TABLE IF EXISTS public.generated_documents CASCADE;")
+    op.execute("DROP TABLE IF EXISTS public.simulations CASCADE;")
+    op.execute("DROP TABLE IF EXISTS public.documents CASCADE;")
+    op.execute("DROP TABLE IF EXISTS public.cases CASCADE;")
     op.execute("DROP TABLE IF EXISTS public.users CASCADE;")
     op.execute("DROP FUNCTION IF EXISTS enforce_export_attestation;")
     op.execute("DROP FUNCTION IF EXISTS audit_log_append_only;")

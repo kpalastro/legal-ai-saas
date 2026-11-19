@@ -15,8 +15,10 @@ human confirmation step anyway, and deterministic parsing is testable.
 
 from __future__ import annotations
 
+import asyncio
 import re
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from enum import StrEnum
 
 import httpx
@@ -61,6 +63,23 @@ class CitationFinding:
     status: CitationStatus
     source: str  # "frl" | "nsw_caselaw" | "parser"
     url: str | None = None
+    # Provenance: when the check ran and the snippet that justified the verdict.
+    # A boolean alone is not an audit record — a lawyer needs the receipt.
+    checked_at: str | None = None
+    evidence: str | None = None
+
+
+def _checked_at() -> str:
+    return datetime.now(UTC).isoformat()
+
+
+def _snippet(text: str, needle: str, width: int = 240) -> str | None:
+    low = text.lower()
+    idx = low.find(needle.lower())
+    if idx < 0:
+        return text[:width].strip() or None
+    start = max(0, idx - width // 3)
+    return text[start : start + width].strip() or None
 
 
 def extract_citations(text: str) -> list[str]:
@@ -109,9 +128,15 @@ async def check_frl(act_ref: str, client: httpx.AsyncClient) -> CitationFinding 
     try:
         r = await client.get(url, timeout=8.0, follow_redirects=True)
         if r.status_code == 200 and act_ref.lower() in r.text.lower():
-            return CitationFinding(act_ref, CitationStatus.VERIFIED, "frl", url)
+            return CitationFinding(
+                act_ref, CitationStatus.VERIFIED, "frl", url,
+                _checked_at(), _snippet(r.text, act_ref),
+            )
         if r.status_code == 200:
-            return CitationFinding(act_ref, CitationStatus.UNVERIFIED, "frl", url)
+            return CitationFinding(
+                act_ref, CitationStatus.UNVERIFIED, "frl", url,
+                _checked_at(), _snippet(r.text, act_ref),
+            )
     except httpx.HTTPError:
         return None
     return None
@@ -125,36 +150,74 @@ async def check_nsw_caselaw(citation: str, client: httpx.AsyncClient) -> Citatio
     try:
         r = await client.get(url, timeout=10.0, follow_redirects=True)
         if r.status_code == 200 and citation.replace(" ", "").lower() in r.text.replace(" ", "").lower():
-            return CitationFinding(citation, CitationStatus.VERIFIED, "nsw_caselaw", url)
+            return CitationFinding(
+                citation, CitationStatus.VERIFIED, "nsw_caselaw", url,
+                _checked_at(), _snippet(r.text, citation),
+            )
         if r.status_code == 200:
-            return CitationFinding(citation, CitationStatus.UNVERIFIED, "nsw_caselaw", url)
+            return CitationFinding(
+                citation, CitationStatus.UNVERIFIED, "nsw_caselaw", url,
+                _checked_at(), _snippet(r.text, citation),
+            )
     except httpx.HTTPError:
         return None
     return None
 
 
+MAX_CITATIONS = 50  # bound the outbound work per document
+
+
+async def _verify_one(
+    ref: str, c: httpx.AsyncClient, sem: asyncio.Semaphore
+) -> CitationFinding:
+    async with sem:
+        if _MEDIUM_NEUTRAL.match(ref):
+            f = await check_nsw_caselaw(ref, c)
+        elif _UNKNOWN_COURT_CITE.match(ref) and not _MEDIUM_NEUTRAL.match(ref):
+            # unknown court abbreviation in a bracket cite — fabrication signal
+            return CitationFinding(ref, CitationStatus.FLAGGED, "parser", None, _checked_at())
+        elif _TRUNCATED_MEDIUM.match(ref):
+            # incomplete citation form — can never verify; flagged for human review
+            return CitationFinding(ref, CitationStatus.FLAGGED, "parser", None, _checked_at())
+        else:
+            f = await check_frl(ref, c)
+        return f or CitationFinding(
+            ref, CitationStatus.UNVERIFIED, "parser", None, _checked_at()
+        )
+
+
 async def verify_citations(text: str, client: httpx.AsyncClient | None = None) -> list[CitationFinding]:
-    """Verify every citation found in text. Offline-safe: unreachable sources
-    return UNVERIFIED (never VERIFIED without source concurrence)."""
-    findings: list[CitationFinding] = []
+    """Verify every citation found in text, concurrently and in input order.
+
+    Offline-safe: unreachable sources return UNVERIFIED (never VERIFIED without
+    source concurrence). Bounded to MAX_CITATIONS per document so a hostile
+    document cannot turn one request into hundreds of outbound calls.
+    """
+    refs = extract_citations(text)[:MAX_CITATIONS]
+    if not refs:
+        return []
+
     own_client = client is None
-    c = client or httpx.AsyncClient()
+    c = client or httpx.AsyncClient(
+        timeout=httpx.Timeout(15.0, connect=5.0),
+        limits=httpx.Limits(max_connections=10, max_keepalive_connections=5),
+    )
+    sem = asyncio.Semaphore(5)  # be a good citizen to the public sources
     try:
-        for ref in extract_citations(text):
-            if _MEDIUM_NEUTRAL.match(ref):
-                f = await check_nsw_caselaw(ref, c)
-            elif _UNKNOWN_COURT_CITE.match(ref) and not _MEDIUM_NEUTRAL.match(ref):
-                # unknown court abbreviation in a bracket cite — fabricated-citation signal
-                findings.append(CitationFinding(ref, CitationStatus.FLAGGED, "parser"))
-                continue
-            elif _TRUNCATED_MEDIUM.match(ref):
-                # incomplete citation form — can never verify; flagged for human review
-                findings.append(CitationFinding(ref, CitationStatus.FLAGGED, "parser"))
-                continue
-            else:
-                f = await check_frl(ref, c)
-            findings.append(f or CitationFinding(ref, CitationStatus.UNVERIFIED, "parser"))
+        results = await asyncio.gather(
+            *(_verify_one(ref, c, sem) for ref in refs),
+            return_exceptions=True,
+        )
     finally:
         if own_client:
             await c.aclose()
+
+    findings: list[CitationFinding] = []
+    for ref, result in zip(refs, results, strict=True):
+        if isinstance(result, BaseException):
+            findings.append(
+                CitationFinding(ref, CitationStatus.UNVERIFIED, "parser", None, _checked_at())
+            )
+        else:
+            findings.append(result)
     return findings

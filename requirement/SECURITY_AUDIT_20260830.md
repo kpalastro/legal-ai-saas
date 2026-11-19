@@ -169,6 +169,4 @@ reset claims. App paths still work under FORCE (supervisor's fresh-signup 201/li
 notes, both minor: (1) migrations now need the `session_replication_role` escape hatch for any future
 tenant-table maintenance — the migration header documents this, keep it that way; (2) FORCE RLS closes the
 *owner* bypass but the defense-in-depth ask (least-privilege non-superuser role for app connections, lexsim_app
-REVOKE tightening ⑦) still stands — FORCE means a superuser connection now obeys policies, but a genuine
-superuser credential is still the keys to the kingdom, so rotation hygiene (②) and grant scoping remain the
-complementary halves. Next in my queue: ③ header-safe SSE per SECURITY_PHASE2_PLAN.md.
+REVOKE tightening ⑦) still stands — FORCE binds the table owner, but superusers and BYPASSRLS roles still bypass RLS. The app now runs `SET LOCAL ROLE lexsim_app` on every request transaction (19 Nov 2026), so tenant queries are subject to policies, and `/health/db` reports the effective role; a genuine superuser credential is still the keys to the kingdom, so rotation hygiene (②) and grant scoping remain the complementary halves. Next in my queue: ③ header-safe SSE per SECURITY_PHASE2_PLAN.md.

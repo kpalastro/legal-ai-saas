@@ -8,10 +8,11 @@
 --
 -- Security checklist §5.1 / TEST_PLAN G1 / audit 20260830 FORCE-RLS item.
 
-ALTER TABLE cases              FORCE ROW LEVEL SECURITY;
-ALTER TABLE documents          FORCE ROW LEVEL SECURITY;
-ALTER TABLE simulations        FORCE ROW LEVEL SECURITY;
-ALTER TABLE generated_documents FORCE ROW LEVEL SECURITY;
-ALTER TABLE deadlines          FORCE ROW LEVEL SECURITY;
-ALTER TABLE audit_log          FORCE ROW LEVEL SECURITY;
-ALTER TABLE audit_content      FORCE ROW LEVEL SECURITY;
+-- Documentation only: alembic runs the .py version, which is schema-qualified.
+ALTER TABLE public.cases               FORCE ROW LEVEL SECURITY;
+ALTER TABLE public.documents           FORCE ROW LEVEL SECURITY;
+ALTER TABLE public.simulations         FORCE ROW LEVEL SECURITY;
+ALTER TABLE public.generated_documents FORCE ROW LEVEL SECURITY;
+ALTER TABLE public.deadlines           FORCE ROW LEVEL SECURITY;
+ALTER TABLE public.audit_log           FORCE ROW LEVEL SECURITY;
+ALTER TABLE public.audit_content       FORCE ROW LEVEL SECURITY;

@@ -30,13 +30,20 @@ NOT_LEGAL_ADVICE = (
     "This is a simulated estimate, not legal advice. Actual outcomes depend on "
     "evidence, procedure and judicial discretion."
 )
+METHODOLOGY_NOTE = (
+    "Model-generated scenario estimate from a 9-turn adversarial simulation. "
+    "It is not a statistical prediction, has not been calibrated against decided "
+    "cases, and must not be presented as a probability of success."
+)
 
 
 def verdict_from_text(text: str) -> dict:
-    """Best-effort parse of the JUDGE's final verdict into the {lower,point,upper} schema.
+    """Parse the JUDGE's final verdict into a validated {lower,point,upper} range.
 
-    Never raises: unparseable output degrades to {"raw": text} so the range-rendering
-    guard downstream can still show a compliant fallback.
+    Never raises. A malformed, out-of-range, or misordered object degrades to
+    {"raw": text} so the downstream range guard still shows a compliant fallback.
+    Validation matters: the previous version accepted any integers, so a model
+    could return lower > upper or 0-1000 and the API would pass it through.
     """
     import json
     import re
@@ -46,12 +53,15 @@ def verdict_from_text(text: str) -> dict:
         try:
             d = json.loads(m.group(0))
             if all(k in d for k in ("lower", "point", "upper")):
-                return {
-                    "lower": int(d["lower"]),
-                    "point": int(d["point"]),
-                    "upper": int(d["upper"]),
-                    "note": "not legal advice",
-                }
+                lower, point, upper = (int(d[k]) for k in ("lower", "point", "upper"))
+                if 0 <= lower <= point <= upper <= 100:
+                    return {
+                        "lower": lower,
+                        "point": point,
+                        "upper": upper,
+                        "note": "not legal advice",
+                        "methodology_note": METHODOLOGY_NOTE,
+                    }
         except (ValueError, TypeError):
             pass
-    return {"raw": text, "note": "not legal advice"}
+    return {"raw": text, "note": "not legal advice", "methodology_note": METHODOLOGY_NOTE}

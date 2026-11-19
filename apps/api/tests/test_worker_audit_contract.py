@@ -139,11 +139,31 @@ class TestWorkerAuditContract:
         finally:
             await eng.dispose()
 
-    async def test_run_simulation_writes_audit_rows(self, seeded_engine) -> None:
-        """Fails-first for the next PR: the placeholder worker stub never calls
-        write_audit_row; this test is what forces the wiring (C1/G5)."""
+    async def test_run_simulation_writes_audit_rows(self, seeded_engine, monkeypatch) -> None:
+        """C1/G5 wiring proof. Uses a stub provider — tests must never depend on a
+        live model (TEST_PLAN nondeterminism rule); the earlier version hit Ollama
+        and failed whenever `qwen3.5:latest` was not pulled."""
+        from app.llm.base import LLMResponse
         from worker.main import run_simulation
 
+        class _StubProvider:
+            model = "stub-model"
+
+            async def complete(self, req):  # noqa: ANN001, ANN201
+                return LLMResponse(
+                    text='{"lower": 40, "point": 50, "upper": 60}',
+                    model=self.model,
+                    prompt_tokens=1,
+                    completion_tokens=1,
+                )
+
+            async def health(self) -> bool:
+                return True
+
+            async def warmup(self) -> None:
+                return None
+
+        monkeypatch.setattr("worker.main.get_provider", lambda: _StubProvider())
         result = await run_simulation(ctx={}, case_id=CASE, user_id=UA)
         assert result["case_id"] == CASE
         eng = create_async_engine(DSN)
